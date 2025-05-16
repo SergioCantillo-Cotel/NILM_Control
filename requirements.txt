@@ -5,6 +5,5 @@ retry_requests
 openmeteo_requests
 datetime
 plotly
-dateutil
 neuralforecast
 requests
