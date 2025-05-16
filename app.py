@@ -105,10 +105,10 @@ def graficar_cond(df):
 # Función para obtener los íconos
 def get_icons():
     return {
-        "general": "/content/images/MedidorGen.png",
-        "ac": "/content/images/MedidorAA.png",
-        "ssfv": "/content/images/MedidorPV.png",
-        "otros": "/content/images/MedidorOtros.png"
+        "general": "images/MedidorGen.png",
+        "ac": "images/MedidorAA.png",
+        "ssfv": "images/MedidorPV.png",
+        "otros": "images/MedidorOtros.png"
     }
 
 # Función para obtener las métricas
