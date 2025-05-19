@@ -10,7 +10,6 @@ import requests_cache
 from retry_requests import retry
 import requests, pytz
 from streamlit_autorefresh import st_autorefresh
-from neuralforecast.core import NeuralForecast
 from keras.models import load_model
 from google.oauth2 import service_account
 from pandas_gbq import read_gbq
