@@ -5,6 +5,8 @@ retry_requests
 openmeteo_requests
 datetime
 plotly
-neuralforecast
+keras
 requests
 scipy
+google-cloud-bigquery
+pandas-gbq
