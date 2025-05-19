@@ -10,3 +10,4 @@ requests
 scipy
 google-cloud-bigquery
 pandas-gbq
+tensorflow
