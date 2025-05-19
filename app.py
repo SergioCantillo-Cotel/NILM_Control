@@ -11,36 +11,49 @@ from retry_requests import retry
 import requests, pytz
 from streamlit_autorefresh import st_autorefresh
 from neuralforecast.core import NeuralForecast
+from keras.models import load_model
+from google.oauth2 import service_account
+from pandas_gbq import read_gbq
 
 # Configuración inicial
+credenciales_json = st.secrets["gcp_service_account"]
+BIGQUERY_PROJECT_ID = st.secrets["bigquery"]["project_id"]
+BIGQUERY_DATASET_ID = st.secrets["bigquery"]["dataset_id"]
+TABLA = st.secrets["bigquery"]["table"]
+TABLA_COMPLETA = f"{BIGQUERY_DATASET_ID}.{TABLA}"
+
 def set_page_config():
     st.set_page_config(page_title="Monitoreo Energético IA", layout="wide")
     st.title("📈 Proyectos IA + Eficiencia energética")
 
-def get_climate_data_act(lat, lon):
-    cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
-    retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
-    openmeteo = openmeteo_requests.Client(session = retry_session)
-    url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-      "latitude": lat, "longitude": lon,
-      "current": ["temperature_2m", "relative_humidity_2m", "precipitation"]
-    }
-    responses = openmeteo.weather_api(url, params=params)
-    response = responses[0]
-    current = response.Current()
-    current_temperature_2m = current.Variables(0).Value()
-    current_relative_humidity_2m = current.Variables(1).Value()
-    current_rain = current.Variables(2).Value()
-    return {
-        "temperatura": round(current_temperature_2m,2),
-        "humedad": current_relative_humidity_2m,
-        "lluvia_mm": current_rain
-    }
-
 def get_IA_model():
-    IA_model = NeuralForecast.load(path='checkpoints/test_run')
+    #IA_model = load_model('models/NILM_Model_best.keras')
+    IA_model = load_model('models/NILM_Model.keras')
     return IA_model
+
+def bigquery_auth():
+    return service_account.Credentials.from_service_account_info(credenciales_json)
+
+def read_bq_db(credentials):
+    query = f"SELECT * FROM `{TABLA_COMPLETA}` ORDER BY datetime_record ASC"
+    df = read_gbq(query, project_id=BIGQUERY_PROJECT_ID, credentials=credentials).rename(columns={'id': 'unique_id', 'datetime_record': 'ds'})
+    mapping = {'PM_General_Potencia_Activa_Total': 'General',
+               'PM_Aires_Potencia_Activa_Total':  'Aires Acondicionados',
+               'Inversor_Solar_Potencia_Salida':  'SSFV'}
+
+    df = df[df['unique_id'].isin(mapping)]
+    df['unique_id'] = df['unique_id'].map(mapping)
+    df['ds'] = pd.to_datetime(df['ds']).dt.floor('15min')
+    df['value'] *= 0.25
+    df = gen_others_load(df)
+    return df
+
+def gen_others_load(df):
+    pivot = (df.pivot_table(index=['ds', 'unit', 'company', 'headquarters'],columns='unique_id',values='value').reset_index())
+    pivot['Otros'] = pivot['General'] + pivot['SSFV'] - pivot['Aires Acondicionados']
+    result = (pivot.melt(id_vars=['ds', 'unit', 'company', 'headquarters'],value_vars=['General', 'Aires Acondicionados', 'SSFV', 'Otros'],var_name='unique_id',value_name='value').sort_values(['ds', 'unique_id']).reset_index(drop=True))
+    return result
+
 
 def get_climate_data_1m(lat, lon):
     cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -49,7 +62,9 @@ def get_climate_data_1m(lat, lon):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
       "latitude": lat, "longitude": lon,
-      "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation"], "past_days": 31
+      "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation"],
+      "start_date": "2025-05-15",
+	    "end_date": ""+datetime.now().strftime("%Y-%m-%d"),
     }
     responses = openmeteo.weather_api(url, params=params)
     hourly = responses[0].Hourly()
@@ -57,31 +72,33 @@ def get_climate_data_1m(lat, lon):
     hourly_relative_humidity_2m = hourly.Variables(1).ValuesAsNumpy()
     hourly_rain = hourly.Variables(2).ValuesAsNumpy()
 
-    hourly_data = {"Fecha": pd.date_range(
-      start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
-      end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+    hourly_data = {"ds": pd.date_range(
+      start = pd.to_datetime(hourly.Time(), unit = "s", utc = False),
+      end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = False),
       freq = pd.Timedelta(seconds = hourly.Interval()),
       inclusive = "left"
     )}
 
-    hourly_data["temperature_2m"] = hourly_temperature_2m
-    hourly_data["relative_humidity_2m"] = hourly_relative_humidity_2m
-    hourly_data["precipitation"] = hourly_rain
+    hourly_data["T2M"] = hourly_temperature_2m
+    hourly_data["RH2M"] = hourly_relative_humidity_2m
+    hourly_data["PRECTOTCORR"] = hourly_rain
 
-    hourly_dataframe = pd.DataFrame(data = hourly_data)
-    return hourly_dataframe
+    hourly_dataframe = pd.DataFrame(data = hourly_data).set_index("ds")
+    hourly_dataframe = hourly_dataframe.resample("15min").interpolate(method="linear").round(2)
+    hourly_dataframe.index = hourly_dataframe.index - pd.Timedelta(hours=5)
 
+    inicio, fin = pd.Timestamp('2025-05-15 16:15:00'), pd.Timestamp(datetime.now() - pd.Timedelta(hours=5))
+    hourly_dataframe = hourly_dataframe[(hourly_dataframe.index >= inicio) & (hourly_dataframe.index <= fin)]
+    return hourly_dataframe.reset_index()
 
-def generar_datos(nombre, dias=30):
-    fechas = pd.date_range(end=pd.Timestamp.today(), periods=dias)
-    np.random.seed(hash(nombre) % 123456)  # Semilla distinta por medidor
-    consumo = np.random.normal(loc=30, scale=10, size=dias).clip(min=0)
-    return pd.DataFrame({"fecha": fechas, "consumo": consumo})
-
-def graficar_consumo(df, titulo):
+def graficar_consumo(df, pron=None, titulo=""):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["fecha"], y=df["consumo"], mode="lines+markers"))
-    fig.update_layout(title=titulo, xaxis_title="Fecha", yaxis_title="Consumo (kWh)", height=300)
+    fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines"))
+    if pron is not None:
+        fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines"))
+    fig.update_layout(title=titulo,
+                      xaxis=dict(domain=[0.1, 0.99],title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False),
+                      yaxis_title="Consumo (kWh)", height=300)
     st.plotly_chart(fig, use_container_width=True)
 
 def graficar_cond(df):
@@ -105,24 +122,24 @@ def graficar_cond(df):
 # Función para obtener los íconos
 def get_icons():
     return {
-        "general": "images/MedidorGen.png",
-        "ac": "images/MedidorAA.png",
-        "ssfv": "images/MedidorPV.png",
-        "otros": "images/MedidorOtros.png"
+        "General": "images/MedidorGen.png",
+        "AC": "images/MedidorAA.png",
+        "SSFV": "images/MedidorPV.png",
+        "Otros": "images/MedidorOtros.png"
     }
 
 # Función para obtener las métricas
-def get_metrics(general, ac, otros, ssfv):
+def get_metrics(general, ac, ssfv, otros):
     return {
-        "general": {"potencia": 25.4, "energia": general.round(2)},
-        "ac": {"potencia": 10.2, "energia": f"{ac:.2f}"},
-        "ssfv": {"potencia": -4.1, "energia": f"{-ssfv:.2f}"},
-        "otros": {"potencia": 19.3, "energia": f"{otros:.2f}"},
+        "General": {"energia": f"{general:.2f}"},
+        "AC": {"energia": f"{ac:.2f}"},
+        "SSFV": {"energia": f"{-ssfv:.2f}"},
+        "Otros": {"energia": f"{otros:.2f}"},
     }
 
 # Submedidores dinámicos
 def get_submedidores(metrics):
-    return [k for k in metrics if k != "general"]
+    return [k for k in metrics if k != "General"]
 
 # Estilo CSS para Streamlit
 def inject_css():
@@ -145,14 +162,13 @@ def inject_css():
     }
 
     [data-testid="stMetric"] label {
-        width: fit-content!important;
+        #width: fit-content!important;
         margin: auto;
     }
 
     div[data-testid="stMetric"] > div:nth-child(2) {
         font-family: 'Poppins';
     }
-
 
     .stButton {
         display: flex;
@@ -177,7 +193,7 @@ def inject_css():
     }
 
     label[data-testid="stMetricLabel"] p{
-        font-size: 1.3em !important;
+        font-size: 1.2em !important;
         font-family: 'Poppins';
     }
 
@@ -201,10 +217,20 @@ def inject_css():
     .st-key-styled_tabs div[data-baseweb="tab-panel"]{
         border-radius:5px;
         padding:10px;
-        background-color:#eeeeee;
+        background-color:#ffffff;
     }
     '''
     st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
+
+def preparar_futuro(db, datos):
+    fut = db[db["unique_id"] == 'General'][['ds', 'value']].rename(columns={'value': 'Energia_kWh_General'})
+    fut['ds'] = pd.to_datetime(fut['ds'])
+    fut['Hour'] = fut['ds'].dt.hour
+    fut['DOW'] = fut['ds'].dt.dayofweek + 1
+    #fut['JL'] = ((fut['Hour'].between(8, 16)) & (fut['DOW'].between(1, 5))).astype(int)
+    fut = fut.merge(datos.drop(columns='PRECTOTCORR', errors='ignore'), on='ds', how='left')
+    return fut[['ds','Energia_kWh_General','Hour','DOW','RH2M','T2M']].sort_values(['ds'])
+    #return fut[['ds','Energia_kWh_General','Hour','DOW','RH2M','T2M','JL']].sort_values(['ds'])
 
 def mostrar_imagen(path, width=150):
     img64 = base64.b64encode(open(path, "rb").read()).decode()
@@ -220,25 +246,25 @@ def toggle_visibility(key):
         st.session_state[key] = not st.session_state[key]
 
 # Función para mostrar el medidor general
-def display_general(icons, metrics):
+def display_general(icons, metrics, db):
     colg = st.columns([1, 2, 1])[1]
     with colg:
-        with st.container(border=True,):
+        with st.container(border=True):
             ca,cb = st.columns([1, 1], vertical_alignment='bottom')
             with ca:
-                mostrar_imagen(icons['general'], 100)
+                mostrar_imagen(icons['General'], 100)
             with cb:
-                st.metric(label="Energía (kWh)", value=metrics['general']['energia'])
+                st.metric(label="Energía (kWh)", value=metrics['General']['energia'], delta="100%",delta_color='off')
 
             if st.button("Ver Detalle", key="butt_gen",use_container_width=True):
                 toggle_visibility("vis_gen")
             if st.session_state.get("vis_gen", False):
-                df = generar_datos("general")
-                graficar_consumo(df, "Consumo del Medidor General")
+                df = db.loc[db["unique_id"] == 'General',['ds','value']]
+                graficar_consumo(df,None,f"Consumo: Medidor General")
 
 
 # Función para mostrar los submedidores
-def display_submedidores(submedidores, nombres_submedidores, icons, metrics):
+def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, pron):
     cols = st.columns(len(submedidores))
     for i, label in enumerate(submedidores):
         with cols[i]:
@@ -258,20 +284,20 @@ def display_submedidores(submedidores, nombres_submedidores, icons, metrics):
                     toggle_visibility(key_vis)
 
                 if st.session_state.get(key_vis, False):
-                    df = generar_datos(nombre)
-                    graficar_consumo(df, f"Consumo de {nombre}")
+                    df = db.loc[db["unique_id"] == nombre,['ds','value']]
+                    graficar_consumo(df, pron[nombre], f"Consumo: {nombre}")
 
 
-def mostrar_interfaz_clima(datos, con_boton=False, lat=None, lon=None):
+def display_extern_cond(datos, con_boton=False, lat=None, lon=None):
     with st.container(border=True):
-        st.subheader("Condiciones Externas")
+        st.subheader("Condiciones Externas",help="")
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("🌡️ Temperatura", f"{round(datos['temperatura'],2)} °C")
+            st.metric("🌡️ Temperatura (°C)", f"{datos['T2M'].iloc[-1]:.2f} ")
         with col2:
-            st.metric("💧 Humedad Relativa", f"{round(datos['humedad'],2)} %")
+            st.metric("💧 Humedad Relativa (%)", f"{datos['RH2M'].iloc[-1]:.2f}")
         with col3:
-            st.metric("🌧️ Precipitaciones", f"{round(datos['lluvia_mm'],2)} mm")
+            st.metric("🌧️ Precipitaciones (mm)", f"{datos['PRECTOTCORR'].iloc[-1]:.2f}")
         if con_boton:
             if st.button("Ver Detalle", key="butt_clima", use_container_width=True):
                 toggle_visibility("vis_clima")
@@ -279,56 +305,83 @@ def mostrar_interfaz_clima(datos, con_boton=False, lat=None, lon=None):
             if st.session_state.get("vis_clima", False):
                 graficar_cond(get_climate_data_1m(lat, lon))
 
+def display_intern_cond(db):
+    df = db.loc[db["unique_id"] == 'General']
+    if len(df) >= 2:
+        diferencia = (df["value"].iloc[-1] - df["value"].iloc[-2])
+    else:
+        diferencia = None
+    with st.container(border=True):
+        st.subheader("Condiciones Internas",help='Condiciones asociadas directamente con el edificio')
+        col1, col2, = st.columns(2)
+        with col1:
+            st.metric("👥 Personas", f"{round(1,0)}")
+        with col2:
+            st.metric("⚡Consumo (kWh)", f"{round(df['value'].iloc[-1],2)}", delta=f"{round(diferencia,1)} kWh", delta_color="inverse")
+
+
+def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
+    """Refresca en el próximo cuarto de hora exacto y luego cada 15 min."""
+    ms_to_q = lambda: ((15 - datetime.now().minute % 15) * 60
+                       - datetime.now().second) * 1000 \
+                      - datetime.now().microsecond // 1000
+    first = st.session_state.setdefault(state_key, True)
+    interval = ms_to_q() if first else 15 * 60 * 1000
+    st.session_state[state_key] = False
+    st_autorefresh(interval=interval, key=key)
+
 # Método principal
 def main():
     set_page_config()
-    st_autorefresh(interval=180000, key="clima_autorefresh")
+    quarter_autorefresh()
     icons = get_icons()
 
-    lat, lon = 3.4793789, -76.5287221
-    datos = get_climate_data_act(lat, lon)
+    credentials = bigquery_auth()
+    db = read_bq_db(credentials)
+
+    lat, lon = 3.4793949016367822, -76.52284557701176
+    datos = get_climate_data_1m(lat, lon)
     with st.container(key="styled_tabs"):
         tab1, tab2 = st.tabs(["⚡ Medición Inteligente No Intrusiva ", " Smart Building "])
+
     nombres_submedidores = {
-        "ac": "Aires Acondicionados",
-        "ssfv": "SSFV",
+        "AC": "Aires Acondicionados",
+        "SSFV": "SSFV",
         "otros": "Otras Cargas"
     }
 
-    futr_df = pd.DataFrame({
-    'ds':   [pd.to_datetime('2025-04-07 13:45'), pd.to_datetime('2025-04-07 13:45'), pd.to_datetime('2025-04-07 13:45')],  # siguiente timestamp
-    'unique_id': ['Energia_kWh_AA','Energia_kWh_Otros','Energia_kWh_PV'],
-    'Energia_kWh_General': [4.672,  4.672,  4.672],
-    'Hour':  [13, 13, 13],
-    'DOW':  [1, 1, 1],
-    'RH2M': [datos["humedad"],datos["humedad"],datos["humedad"]],
-    'T2M': [datos["temperatura"], datos["temperatura"], datos["temperatura"]]
-    })
-
-    #st.write(futr_df)
     modelo_IA = get_IA_model()
-    Y_hat_df2 = modelo_IA.predict(futr_df=futr_df)
-    metrics = get_metrics(futr_df.Energia_kWh_General[0],
-                          Y_hat_df2.AutoLSTM[0],
-                          Y_hat_df2.AutoLSTM[1],
-                          Y_hat_df2.AutoLSTM[2])
+    caracteristicas = preparar_futuro(db, datos).drop(columns=['ds']).values
+    caracteristicas = caracteristicas.reshape(-1, 1, caracteristicas.shape[1])
+    Y_hat_df2 = pd.DataFrame(modelo_IA.predict(caracteristicas), columns=['Aires Acondicionados','SSFV','Otros'])
+    Y_hat_df2.index = db.loc[db["unique_id"] == 'General', "ds"].reset_index(drop=True)
+    #st.write(caracteristicas.reshape(caracteristicas.shape[0],caracteristicas.shape[2]))
+    #st.write(Y_hat_df2)
+    metrics = get_metrics(db.loc[db["unique_id"] == 'General',"value"].iloc[-1],
+                          Y_hat_df2['Aires Acondicionados'].iloc[-1],
+                          Y_hat_df2['SSFV'].iloc[-1],
+                          Y_hat_df2['Otros'].iloc[-1])
 
     inject_css()
 
     with tab1.container(key='cont-nilm'):
-        mostrar_interfaz_clima(datos)
+        display_extern_cond(datos)
         submedidores = get_submedidores(metrics)
         with st.container(border=True):
             st.subheader("Medición Desagregada")
-            display_general(icons, metrics)
+            display_general(icons, metrics, db)
             st.markdown("<div style='text-align:center; margin-top: -20px; font-size:33px;'> ┌──────────────┼──────────────┐<br></div>", unsafe_allow_html=True)
-            display_submedidores(submedidores, nombres_submedidores, icons, metrics)
+            display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, Y_hat_df2)
 
     with tab2.container(key='cont-ci'):
-        mostrar_interfaz_clima(datos,True,lat,lon)
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            display_extern_cond(datos,False,lat,lon)
+        with col2:
+            display_intern_cond(db)
 
     zona = pytz.timezone("America/Bogota")
-    ahora = datetime.now(zona).strftime("%Y-%m-%d %H:%M:%S")
+    ahora = pd.Timestamp(datetime.now(zona)).floor('15min').strftime("%Y-%m-%d %H:%M:%S")
     st.caption(f"🔄 Esta página se actualiza cada 15 minutos. Última actualización: {ahora}")
 
 if __name__ == "__main__":
