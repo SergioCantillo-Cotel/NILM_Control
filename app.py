@@ -287,7 +287,6 @@ def display_general(icons, metrics, db):
                 df = db.loc[db["unique_id"] == 'General',['ds','value']]
                 graficar_consumo(df,None,f"Consumo: Medidor General")
 
-
 # Función para mostrar los submedidores
 def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, pron):
     cols = st.columns(len(submedidores))
@@ -412,8 +411,8 @@ def seleccionar_unidades(pred, intensidad_base):
     return tabla[mejor]
 
 def get_IA_model():
-    IA_model = load_model('models/NILM_Model_best.keras')
-    #IA_model = load_model('models/NILM_Model.keras')
+    #IA_model = load_model('models/NILM_Model_best.keras')
+    IA_model = load_model('models/NILM_Model.keras')
     return IA_model
 
 def datos_Exog(db, datos):
