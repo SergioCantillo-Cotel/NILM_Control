@@ -8,8 +8,9 @@ from dateutil.relativedelta import relativedelta
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
-import requests, pytz
+import requests, pytz, holidays
 from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 from keras.models import load_model
 from google.oauth2 import service_account
 from pandas_gbq import read_gbq
@@ -34,25 +35,54 @@ def bigquery_auth():
     return service_account.Credentials.from_service_account_info(credenciales_json)
 
 def read_bq_db(credentials):
-    query = f"SELECT * FROM `{TABLA_COMPLETA}` ORDER BY datetime_record ASC"
-    df = read_gbq(query, project_id=BIGQUERY_PROJECT_ID, credentials=credentials).rename(columns={'id': 'unique_id', 'datetime_record': 'ds'})
-    mapping = {'PM_General_Potencia_Activa_Total': 'General',
-               'PM_Aires_Potencia_Activa_Total':  'Aires Acondicionados',
-               'Inversor_Solar_Potencia_Salida':  'SSFV'}
+    # Constantes internas
+    _POWER = [
+        'PM_General_Potencia_Activa_Total',
+        'PM_Aires_Potencia_Activa_Total',
+        'Inversor_Solar_Potencia_Salida'
+    ]
+    _INTERN = ['ocupacion_sede','IDU_0_1_Room_Temperature','IDU_0_2_Room_Temperature','IDU_0_1_Room_Temperature',
+               'IDU_0_3_Room_Temperature','IDU_0_4_Room_Temperature','IDU_0_5_Room_Temperature',
+               'IDU_0_6_Room_Temperature','IDU_0_7_Room_Temperature','IDU_0_8_Room_Temperature',
+               'IDU_0_9_Room_Temperature','IDU_0_10_Room_Temperature']
 
-    df = df[df['unique_id'].isin(mapping)]
-    df['unique_id'] = df['unique_id'].map(mapping)
-    df['ds'] = pd.to_datetime(df['ds']).dt.floor('15min')
-    df['value'] *= 0.25
-    df = gen_others_load(df)
-    return df
+    _MAPPING = {
+        'PM_General_Potencia_Activa_Total': 'General',
+        'PM_Aires_Potencia_Activa_Total': 'Aires Acondicionados',
+        'Inversor_Solar_Potencia_Salida': 'SSFV',
+        'ocupacion_sede': 'Ocupacion',
+        'IDU_0_1_Room_Temperature': 'T1','IDU_0_2_Room_Temperature': 'T2',
+        'IDU_0_3_Room_Temperature': 'T3','IDU_0_4_Room_Temperature': 'T4',
+        'IDU_0_5_Room_Temperature': 'T5','IDU_0_6_Room_Temperature': 'T6',
+        'IDU_0_7_Room_Temperature': 'T7','IDU_0_8_Room_Temperature': 'T8',
+        'IDU_0_9_Room_Temperature': 'T9','IDU_0_10_Room_Temperature': 'T10'
+    }
+
+    # Leer datos de BigQuery
+    query = f"SELECT * FROM `{TABLA_COMPLETA}` ORDER BY datetime_record ASC"
+    df = (pd.read_gbq(query, project_id=BIGQUERY_PROJECT_ID, credentials=credentials)
+          .rename(columns={'id': 'unique_id', 'datetime_record': 'ds'}))
+
+    # Separar en potencia y resto
+    df_power = df[df['unique_id'].isin(_POWER)].copy()
+    df_other = df[df['unique_id'].isin(_INTERN)].copy()
+
+    # Procesar datos de potencia: escala, tiempo y mapeo
+    df_power['value'] *= 0.25
+    df_power['ds'] = pd.to_datetime(df_power['ds']).dt.floor('15min')
+    df_power['unique_id'] = df_power['unique_id'].map(_MAPPING)
+    df_power = gen_others_load(df_power)
+
+    # Procesar el resto: solo mapeo de identificadores
+    df_other['unique_id'] = df_other['unique_id'].map(_MAPPING)
+
+    return df_power, df_other
 
 def gen_others_load(df):
     pivot = (df.pivot_table(index=['ds', 'unit', 'company', 'headquarters'],columns='unique_id',values='value').reset_index())
     pivot['Otros'] = pivot['General'] + pivot['SSFV'] - pivot['Aires Acondicionados']
     result = (pivot.melt(id_vars=['ds', 'unit', 'company', 'headquarters'],value_vars=['General', 'Aires Acondicionados', 'SSFV', 'Otros'],var_name='unique_id',value_name='value').sort_values(['ds', 'unique_id']).reset_index(drop=True))
     return result
-
 
 def get_climate_data_1m(lat, lon):
     cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -167,6 +197,7 @@ def inject_css():
 
     div[data-testid="stMetric"] > div:nth-child(2) {
         font-family: 'Poppins';
+        font-size:2em!important;
     }
 
     .stButton {
@@ -192,7 +223,7 @@ def inject_css():
     }
 
     label[data-testid="stMetricLabel"] p{
-        font-size: 1.2em !important;
+        font-size: 1.3em !important;
         font-family: 'Poppins';
     }
 
@@ -221,11 +252,11 @@ def inject_css():
     '''
     st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
 
-def preparar_futuro(db, datos):
+def datos_Exog(db, datos):
     fut = db[db["unique_id"] == 'General'][['ds', 'value']].rename(columns={'value': 'Energia_kWh_General'})
     fut['ds'] = pd.to_datetime(fut['ds'])
-    fut['Hour'] = fut['ds'].dt.hour
     fut['DOW'] = fut['ds'].dt.dayofweek + 1
+    fut['Hour'] = fut['ds'].dt.hour
     #fut['JL'] = ((fut['Hour'].between(8, 16)) & (fut['DOW'].between(1, 5))).astype(int)
     fut = fut.merge(datos.drop(columns='PRECTOTCORR', errors='ignore'), on='ds', how='left')
     return fut[['ds','Energia_kWh_General','Hour','DOW','RH2M','T2M']].sort_values(['ds'])
@@ -289,14 +320,15 @@ def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db,
 
 def display_extern_cond(datos, con_boton=False, lat=None, lon=None):
     with st.container(border=True):
-        st.subheader("Condiciones Externas",help="")
+        st.markdown("#### Condiciones Externas")
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("🌡️ Temperatura (°C)", f"{datos['T2M'].iloc[-1]:.2f} ")
+            st.metric("🌡️ Temperatura", f"{datos['T2M'].iloc[-1]:.1f} °C")
+            st.markdown('<br>',unsafe_allow_html=True)
         with col2:
-            st.metric("💧 Humedad Relativa (%)", f"{datos['RH2M'].iloc[-1]:.2f}")
+            st.metric("💧 Hum. Relativa", f"{datos['RH2M'].iloc[-1]:.1f} %")
         with col3:
-            st.metric("🌧️ Precipitaciones (mm)", f"{datos['PRECTOTCORR'].iloc[-1]:.2f}")
+            st.metric("🌧️ Precipitaciones", f"{datos['PRECTOTCORR'].iloc[-1]:.1f} mm")
         if con_boton:
             if st.button("Ver Detalle", key="butt_clima", use_container_width=True):
                 toggle_visibility("vis_clima")
@@ -304,20 +336,45 @@ def display_extern_cond(datos, con_boton=False, lat=None, lon=None):
             if st.session_state.get("vis_clima", False):
                 graficar_cond(get_climate_data_1m(lat, lon))
 
-def display_intern_cond(db):
-    df = db.loc[db["unique_id"] == 'General']
+def display_intern_cond(db1,db2):
+    df = db2.loc[db2["unique_id"] == 'General']
+    df_temp = db1.loc[db1["unit"] == '°C']
+    promedios = (df_temp.groupby(df_temp['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean().reset_index(name='temp_promedio'))
+    df_pers = db1.loc[db1["unique_id"] == 'Ocupacion']
     if len(df) >= 2:
         diferencia = (df["value"].iloc[-1] - df["value"].iloc[-2])
     else:
         diferencia = None
     with st.container(border=True):
-        st.subheader("Condiciones Internas",help='Condiciones asociadas directamente con el edificio')
-        col1, col2, = st.columns(2)
+        st.markdown("#### Condiciones Internas")
+        #st.subheader("#### Condiciones Internas",help='Condiciones asociadas directamente con el edificio')
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("👥 Personas", f"{round(1,0)}")
+            st.metric("👥 Personas", f"{df_pers['value'].iloc[-1]:.0f}")
+            st.markdown('<br>',unsafe_allow_html=True)
         with col2:
-            st.metric("⚡Consumo (kWh)", f"{round(df['value'].iloc[-1],2)}", delta=f"{round(diferencia,1)} kWh", delta_color="inverse")
+            st.metric("⚡Consumo", f"{round(df['value'].iloc[-1],1)} kWh", delta=f"{round(diferencia,1)} kWh", delta_color="inverse")
+        with col3:
+            st.metric("🌡️ Temperatura",f"{promedios['temp_promedio'].iloc[-1]:.1f} °C")
 
+def display_smart_control(db1,db2):
+    personas = db1.loc[db1["unique_id"] == 'Ocupacion'].iloc[-1,2]
+    t_int = db1.groupby(db1['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean().reset_index(name='temp_promedio').iloc[-1,1]
+    t_ext = db2['T2M'].iloc[-1]
+    with st.container(border=True):
+         st.markdown("#### Control Edificio")
+         with st.container(key="styled_tabs_2"):
+              tab1, tab2 = st.tabs(["Programación Estándar", "Programación IA"])
+              with tab1.container(key='cont-BMS'):
+                  with open("BMS/programaciónBMS_estandar.html", 'r', encoding='utf-8') as f:
+                      html_content = f.read()
+                      components.html(html_content, height=400, scrolling=True)
+
+              with tab2.container(key='cont-BMS-IA'):
+                  ruta = 'BMS/programacion_bms.xlsx'
+                  resultado = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
+                  st.info(resultado)
+                  components.iframe('http://192.168.5.200:3000/Piso_1_Lado_B', height=400, scrolling=True)
 
 def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
     """Refresca en el próximo cuarto de hora exacto y luego cada 15 min."""
@@ -329,6 +386,25 @@ def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
     st.session_state[state_key] = False
     st_autorefresh(interval=interval, key=key)
 
+def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
+    df = pd.read_excel(ruta, usecols=[0,1,2,3],
+                       names=['dia','hora','_','intensidad'])
+    dias = {'Monday':'Lunes','Tuesday':'Martes','Wednesday':'Miércoles',
+            'Thursday':'Jueves','Friday':'Viernes','Saturday':'Sábado','Sunday':'Domingo'}
+    dia = dias[fecha.strftime('%A')]
+    h = fecha.hour
+    base = df.loc[(df.dia==fecha.strftime('%A'))&(df.hora==h),'intensidad']
+    fest = pd.to_datetime(list(holidays.CountryHoliday('CO', years=fecha.year).keys())).date
+    if fecha.date() in fest:
+        return f"Hoy es {dia} y la hora actual es {h}, la programación Estándar del BMS es: Intensidad de Aires 0 %"
+    if base.empty:
+        return f"No hay programación registrada para {dia} a las {h}:00 horas."
+    b = base.iat[0]
+    p = max(0,min(100, b -5*(25-temp_externa) - (100 if num_personas<5 else 50 if num_personas<10 else 25 if num_personas<20 else -50 if num_personas>=30 else 0) +2*(temp_interna-25)))
+    msg = (f"Hoy, {dia} a las {h}:00, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
+          f"Ahora, dado que hay {num_personas} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
+    return msg
+
 # Método principal
 def main():
     set_page_config()
@@ -336,8 +412,7 @@ def main():
     icons = get_icons()
 
     credentials = bigquery_auth()
-    db = read_bq_db(credentials)
-
+    db_pow, db_oth = read_bq_db(credentials)
     lat, lon = 3.4793949016367822, -76.52284557701176
     datos = get_climate_data_1m(lat, lon)
     with st.container(key="styled_tabs"):
@@ -350,13 +425,13 @@ def main():
     }
 
     modelo_IA = get_IA_model()
-    caracteristicas = preparar_futuro(db, datos).drop(columns=['ds']).values
-    caracteristicas = caracteristicas.reshape(-1, 1, caracteristicas.shape[1])
-    Y_hat_df2 = pd.DataFrame(modelo_IA.predict(caracteristicas), columns=['Aires Acondicionados','SSFV','Otros'])
-    Y_hat_df2.index = db.loc[db["unique_id"] == 'General', "ds"].reset_index(drop=True)
-    #st.write(caracteristicas.reshape(caracteristicas.shape[0],caracteristicas.shape[2]))
-    #st.write(Y_hat_df2)
-    metrics = get_metrics(db.loc[db["unique_id"] == 'General',"value"].iloc[-1],
+    caracteristicas = datos_Exog(db_pow, datos).drop(columns=['ds'])
+    car2 = caracteristicas.copy()
+    y_hat_raw = modelo_IA.predict(caracteristicas.values.reshape(-1, 1, caracteristicas.shape[1]))
+    Y_hat_df2 = pd.DataFrame(y_hat_raw, columns=['Aires Acondicionados','SSFV','Otros'])
+
+    Y_hat_df2.index = db_pow.loc[db_pow["unique_id"] == 'General', "ds"].reset_index(drop=True)
+    metrics = get_metrics(db_pow.loc[db_pow["unique_id"] == 'General',"value"].iloc[-1],
                           Y_hat_df2['Aires Acondicionados'].iloc[-1],
                           Y_hat_df2['SSFV'].iloc[-1],
                           Y_hat_df2['Otros'].iloc[-1])
@@ -368,16 +443,18 @@ def main():
         submedidores = get_submedidores(metrics)
         with st.container(border=True):
             st.subheader("Medición Desagregada")
-            display_general(icons, metrics, db)
+            display_general(icons, metrics, db_pow)
             st.markdown("<div style='text-align:center; margin-top: -20px; font-size:33px;'> ┌──────────────┼──────────────┐<br></div>", unsafe_allow_html=True)
-            display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, Y_hat_df2)
+            display_submedidores(submedidores, nombres_submedidores, icons, metrics, db_pow, Y_hat_df2)
 
     with tab2.container(key='cont-ci'):
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([1, 1], vertical_alignment='bottom')
         with col1:
             display_extern_cond(datos,False,lat,lon)
         with col2:
-            display_intern_cond(db)
+            display_intern_cond(db_oth,db_pow)
+
+        display_smart_control(db_oth,datos)
 
     zona = pytz.timezone("America/Bogota")
     ahora = pd.Timestamp(datetime.now(zona)).floor('15min').strftime("%Y-%m-%d %H:%M:%S")
