@@ -12,3 +12,4 @@ google-cloud-bigquery
 pandas-gbq
 tensorflow
 holidays
+openpyxl
