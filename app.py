@@ -26,10 +26,15 @@ def set_page_config():
     st.set_page_config(page_title="Monitoreo Energético IA", layout="wide")
     st.title("📈 Proyectos IA + Eficiencia energética")
 
-def get_IA_model():
-    #IA_model = load_model('models/NILM_Model_best.keras')
-    IA_model = load_model('models/NILM_Model.keras')
-    return IA_model
+def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
+    """Refresca en el próximo cuarto de hora exacto y luego cada 15 min."""
+    ms_to_q = lambda: ((15 - datetime.now().minute % 15) * 60
+                       - datetime.now().second) * 1000 \
+                      - datetime.now().microsecond // 1000
+    first = st.session_state.setdefault(state_key, True)
+    interval = ms_to_q() if first else 15 * 60 * 1000
+    st.session_state[state_key] = False
+    st_autorefresh(interval=interval, key=key)
 
 def bigquery_auth():
     return service_account.Credentials.from_service_account_info(credenciales_json)
@@ -122,9 +127,9 @@ def get_climate_data_1m(lat, lon):
 
 def graficar_consumo(df, pron=None, titulo=""):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines"))
+    fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
     if pron is not None:
-        fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines"))
+        fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines",name='Pronosticado'))
     fig.update_layout(title=titulo,
                       xaxis=dict(domain=[0.1, 0.99],title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False),
                       yaxis_title="Consumo (kWh)", height=300)
@@ -203,7 +208,7 @@ def inject_css():
     .stButton {
         display: flex;
         justify-content: center;
-        margin-top: 2em;
+        margin-top: 0em;
     }
 
      .stButton > button {
@@ -252,16 +257,6 @@ def inject_css():
     '''
     st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
 
-def datos_Exog(db, datos):
-    fut = db[db["unique_id"] == 'General'][['ds', 'value']].rename(columns={'value': 'Energia_kWh_General'})
-    fut['ds'] = pd.to_datetime(fut['ds'])
-    fut['DOW'] = fut['ds'].dt.dayofweek + 1
-    fut['Hour'] = fut['ds'].dt.hour
-    #fut['JL'] = ((fut['Hour'].between(8, 16)) & (fut['DOW'].between(1, 5))).astype(int)
-    fut = fut.merge(datos.drop(columns='PRECTOTCORR', errors='ignore'), on='ds', how='left')
-    return fut[['ds','Energia_kWh_General','Hour','DOW','RH2M','T2M']].sort_values(['ds'])
-    #return fut[['ds','Energia_kWh_General','Hour','DOW','RH2M','T2M','JL']].sort_values(['ds'])
-
 def mostrar_imagen(path, width=150):
     img64 = base64.b64encode(open(path, "rb").read()).decode()
     st.markdown(
@@ -280,11 +275,11 @@ def display_general(icons, metrics, db):
     colg = st.columns([1, 2, 1])[1]
     with colg:
         with st.container(border=True):
-            ca,cb = st.columns([1, 1], vertical_alignment='bottom')
+            ca,cb = st.columns([1, 2], vertical_alignment='top')
             with ca:
                 mostrar_imagen(icons['General'], 100)
             with cb:
-                st.metric(label="Energía (kWh)", value=metrics['General']['energia'], delta="100%",delta_color='off')
+                st.metric(label="General", value=metrics['General']['energia']+" kWh (100%)")
 
             if st.button("Ver Detalle", key="butt_gen",use_container_width=True):
                 toggle_visibility("vis_gen")
@@ -297,16 +292,16 @@ def display_general(icons, metrics, db):
 def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, pron):
     cols = st.columns(len(submedidores))
     for i, label in enumerate(submedidores):
+        nombre = nombres_submedidores.get(label, label)
         with cols[i]:
             with st.container(border=True):
-                ca,cb = st.columns([1, 1], vertical_alignment='bottom')
+                ca,cb = st.columns([1, 2], vertical_alignment='top')
                 with ca:
                     mostrar_imagen(icons[label], 100)
                 with cb:
-                    st.metric(label="Energía (kWh)", value=metrics[label]['energia'])
-                st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
-
-                nombre = nombres_submedidores.get(label, label)
+                    porc = (pron.iloc[-1,i]/db.loc[db["unique_id"] == 'General',['value']].iloc[-1,0])*100
+                    st.metric(label=nombre, value=f"{metrics[label]['energia']} kWh ({porc:.1f}%)")
+              
                 key_btn = f"butt_{nombre}"
                 key_vis = f"vis_{nombre}"
 
@@ -347,7 +342,6 @@ def display_intern_cond(db1,db2):
         diferencia = None
     with st.container(border=True):
         st.markdown("#### Condiciones Internas")
-        #st.subheader("#### Condiciones Internas",help='Condiciones asociadas directamente con el edificio')
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("👥 Personas", f"{df_pers['value'].iloc[-1]:.0f}")
@@ -372,19 +366,18 @@ def display_smart_control(db1,db2):
 
               with tab2.container(key='cont-BMS-IA'):
                   ruta = 'BMS/programacion_bms.xlsx'
-                  resultado = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
+                  resultado, pronostico, base = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
                   st.info(resultado)
-                  components.iframe('http://192.168.5.200:3000/Piso_1_Lado_B', height=400, scrolling=True)
+                  unidades = seleccionar_unidades(pronostico, base)
+                  cols = st.columns(5)
+                  estados = {}
+                  for i, col in enumerate(cols):
+                      with col:
+                          # si el valor es 1 o 2, lo marcamos como True
+                          inicial = unidades[i] == 1
+                          estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
 
-def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
-    """Refresca en el próximo cuarto de hora exacto y luego cada 15 min."""
-    ms_to_q = lambda: ((15 - datetime.now().minute % 15) * 60
-                       - datetime.now().second) * 1000 \
-                      - datetime.now().microsecond // 1000
-    first = st.session_state.setdefault(state_key, True)
-    interval = ms_to_q() if first else 15 * 60 * 1000
-    st.session_state[state_key] = False
-    st_autorefresh(interval=interval, key=key)
+                  components.iframe('http://192.168.5.200:3000/Piso_1_Lado_B', height=400, scrolling=True)
 
 def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
     df = pd.read_excel(ruta, usecols=[0,1,2,3],
@@ -403,7 +396,33 @@ def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
     p = max(0,min(100, b -5*(25-temp_externa) - (100 if num_personas<5 else 50 if num_personas<10 else 25 if num_personas<20 else -50 if num_personas>=30 else 0) +2*(temp_interna-25)))
     msg = (f"Hoy, {dia} a las {h}:00, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
           f"Ahora, dado que hay {num_personas} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
-    return msg
+    return msg, p, b 
+
+def seleccionar_unidades(pred, intensidad_base):
+    tabla = {0:   [0]*5,
+             15:  [1,0,0,0,0],
+             25:  [1,0,1,0,0],
+             50:  [1,0,1,1,0],
+             75:  [1,0,1,1,1],100: [1]*5,
+             "automatico": [2]*5}
+    if abs(pred - intensidad_base) < 10:
+        return tabla["automatico"]
+    # Si no, elegimos la intensidad entera más alta ≤ pred (o 0 por defecto)
+    mejor = max((i for i in tabla if isinstance(i, int) and i <= pred), default=0)
+    return tabla[mejor]
+
+def get_IA_model():
+    IA_model = load_model('models/NILM_Model_best.keras')
+    #IA_model = load_model('models/NILM_Model.keras')
+    return IA_model
+
+def datos_Exog(db, datos):
+    fut = db[db["unique_id"] == 'General'][['ds', 'value']].rename(columns={'value': 'Energia_kWh_General'})
+    fut['ds'] = pd.to_datetime(fut['ds'])
+    fut['DOW'] = fut['ds'].dt.dayofweek + 1
+    fut['Hour'] = fut['ds'].dt.hour
+    fut = fut.merge(datos.drop(columns='PRECTOTCORR', errors='ignore'), on='ds', how='left')
+    return fut[['ds','Energia_kWh_General','DOW','Hour','T2M','RH2M']].sort_values(['ds'])
 
 # Método principal
 def main():
