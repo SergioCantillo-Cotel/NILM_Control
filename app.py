@@ -415,8 +415,8 @@ def seleccionar_unidades(pred, intensidad_base):
     return tabla[mejor]
 
 def get_IA_model():
-    IA_model = load_model('models/NILM_Model_best.keras')
-    #IA_model = load_model('models/NILM_Model.keras')
+    #IA_model = load_model('models/NILM_Model_best.keras')
+    IA_model = load_model('models/NILM_Model.keras')
     return IA_model
 
 def datos_Exog(db, datos):
