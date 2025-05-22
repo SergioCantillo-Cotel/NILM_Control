@@ -148,9 +148,8 @@ def graficar_intensidad_heatmap(ruta_excel):
     df = pd.read_excel(ruta_excel)
     df["dia_semana"] = pd.Categorical(df["dia_semana"], categories=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], ordered=True)
     tabla = df.pivot(index='dia_semana', columns='hora', values='intensidad')
-    fig=go.Figure(go.Heatmap(z=tabla.values, x=tabla.columns, y=tabla.index, colorscale='Viridis', colorbar_title='Intensidad'))\
-      .update_layout(title='Intensidad Habitual Aires por Día de la Semana y Hora', xaxis_title='Hora', yaxis_title='Día', template='simple_white')\
-      .show()
+    fig = go.Figure(go.Heatmap(z=tabla.values, x=tabla.columns, y=tabla.index,colorscale='Viridis', colorbar_title='Intensidad'))
+    fig.update_layout(title='Intensidad Habitual Aires por Día de la Semana y Hora', xaxis_title='Hora', yaxis_title='Día', template='simple_white')
     st.plotly_chart(fig, use_container_width=True)
 
 def graficar_cond(df):
