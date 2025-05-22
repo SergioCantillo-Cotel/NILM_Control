@@ -128,8 +128,7 @@ def get_climate_data_1m(lat, lon):
 def graficar_consumo(df,pron,sub):
     fig = go.Figure()
     colores=('gray','orange','green')
-    y_stack = np.zeros(len(df["value"]))
-    st.write(y_stack)
+    y_stack = df["value"]
     if not sub:
         fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
         orden = ["SSFV", "Otros", "Aires Acondicionados"]
