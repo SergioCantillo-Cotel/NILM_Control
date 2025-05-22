@@ -24,7 +24,7 @@ TABLA_COMPLETA = f"{BIGQUERY_DATASET_ID}.{TABLA}"
 
 def set_page_config():
     st.set_page_config(page_title="Monitoreo Energético IA", layout="wide")
-    st.title("📈 Proyectos IA + Eficiencia energética")
+    #st.title("📈 Proyectos IA + Eficiencia energética")
 
 def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
     """Refresca en el próximo cuarto de hora exacto y luego cada 15 min."""
@@ -125,15 +125,33 @@ def get_climate_data_1m(lat, lon):
     hourly_dataframe = hourly_dataframe[(hourly_dataframe.index >= inicio) & (hourly_dataframe.index <= fin)]
     return hourly_dataframe.reset_index()
 
-def graficar_consumo(df, pron=None, titulo=""):
+def graficar_consumo(df,pron,sub):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
-    if pron is not None:
+    colores=('gray','orange','green')
+    y_stack = np.zeros(len(df["value"]))
+    st.write(y_stack)
+    if not sub:
+        fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
+        orden = ["SSFV", "Otros", "Aires Acondicionados"]
+        for i in orden:
+            y_stack = y_stack + pron[i] if i == orden[0] else y_stack - pron[i]
+            fig.add_trace(go.Scatter(x=df["ds"], y=y_stack, mode='lines',
+                                    line=dict(width=0.5), fill='tonexty', hoverinfo='x+y',name=i))
+    else:
+        fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
         fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines",name='Pronosticado'))
-    fig.update_layout(title=titulo,
+    fig.update_layout(title="", margin=dict(t=10, b=0),
                       xaxis=dict(domain=[0.1, 0.99],title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False),
-                      yaxis_title="Consumo (kWh)", height=300)
+                      yaxis_title="Consumo (kWh)",legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.7, yanchor="top"), height=200)
     st.plotly_chart(fig, use_container_width=True)
+
+def graficar_intensidad_heatmap(ruta_excel):
+    df = pd.read_excel(ruta_excel)
+    df["dia_semana"] = pd.Categorical(df["dia_semana"], categories=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], ordered=True)
+    tabla = df.pivot(index='dia_semana', columns='hora', values='intensidad')
+    go.Figure(go.Heatmap(z=tabla.values, x=tabla.columns, y=tabla.index, colorscale='Viridis', colorbar_title='Intensidad'))\
+      .update_layout(title='Intensidad Habitual Aires por Día de la Semana y Hora', xaxis_title='Hora', yaxis_title='Día', template='simple_white')\
+      .show()
 
 def graficar_cond(df):
     x, y1, y2, y3 = df.columns
@@ -150,7 +168,7 @@ def graficar_cond(df):
                       yaxis2=dict(title="%", overlaying="y", side="left", anchor="free", showgrid=False, showline=False, autoshift=True, position = 0.03),
                       yaxis3=dict(title="mm", overlaying="y", side="left", anchor="free", showgrid=False, showline=False, autoshift=True),
                       margin=dict(l=100, r=20, t=40, b=60),
-                      legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.4, yanchor="top"), height=400)
+                      legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.4, yanchor="top"), height=200)
     st.plotly_chart(fig, use_container_width=True)
 
 # Función para obtener los íconos
@@ -184,7 +202,11 @@ def inject_css():
     body, h1, h2, h3, h4, h5, h6, p, .stDataFrame, .stButton>button, .stMetricValue {
         font-family: 'Poppins' !important;
     }
-
+    
+    .block-container {
+        padding-top: 1rem;    
+    }
+    
     [data-testid="stMetric"] {
         width: fit-content!important;
         margin: auto;
@@ -271,21 +293,19 @@ def toggle_visibility(key):
         st.session_state[key] = not st.session_state[key]
 
 # Función para mostrar el medidor general
-def display_general(icons, metrics, db):
-    colg = st.columns([1, 2, 1])[1]
-    with colg:
-        with st.container(border=True):
+def display_general(icons, metrics, db, pron):
+    with st.container(border=True):
+        colg,colh = st.columns([1, 2], vertical_alignment='center')
+        with colg:
             ca,cb = st.columns([1, 2], vertical_alignment='top')
             with ca:
                 mostrar_imagen(icons['General'], 100)
             with cb:
-                st.metric(label="General", value=metrics['General']['energia']+" kWh (100%)")
+                st.metric(label="Medición General", value=metrics['General']['energia']+" kWh (100%)")
 
-            if st.button("Ver Detalle", key="butt_gen",use_container_width=True):
-                toggle_visibility("vis_gen")
-            if st.session_state.get("vis_gen", False):
-                df = db.loc[db["unique_id"] == 'General',['ds','value']]
-                graficar_consumo(df,None,f"Consumo: Medidor General")
+        with colh:
+            df = db.loc[db["unique_id"] == 'General',['ds','value']]
+            graficar_consumo(df,pron,False)
 
 
 # Función para mostrar los submedidores
@@ -299,9 +319,6 @@ def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db,
                 with ca:
                     mostrar_imagen(icons[label], 100)
                 with cb:
-                    st.write()
-                    #porc = (pron.iloc[-1,i]/db.loc[db["unique_id"] == 'General',['value']].iloc[-1,0])*100
-                    
                     porc = (pron.iloc[-1,i]/sum(pron.iloc[-1,:]))*100
                     st.metric(label=nombre, value=f"{metrics[label]['energia']} kWh ({porc:.1f}%)")
 
@@ -313,7 +330,7 @@ def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db,
 
                 if st.session_state.get(key_vis, False):
                     df = db.loc[db["unique_id"] == nombre,['ds','value']]
-                    graficar_consumo(df, pron[nombre], f"Consumo: {nombre}")
+                    graficar_consumo(df, pron[nombre], True)
 
 
 def display_extern_cond(datos, con_boton=False, lat=None, lon=None):
@@ -327,17 +344,11 @@ def display_extern_cond(datos, con_boton=False, lat=None, lon=None):
             st.metric("💧 Hum. Relativa", f"{datos['RH2M'].iloc[-1]:.1f} %")
         with col3:
             st.metric("🌧️ Precipitaciones", f"{datos['PRECTOTCORR'].iloc[-1]:.1f} mm")
-        if con_boton:
-            if st.button("Ver Detalle", key="butt_clima", use_container_width=True):
-                toggle_visibility("vis_clima")
-
-            if st.session_state.get("vis_clima", False):
-                graficar_cond(get_climate_data_1m(lat, lon))
 
 def display_intern_cond(db1,db2):
     df = db2.loc[db2["unique_id"] == 'General']
     df_temp = db1.loc[db1["unit"] == '°C']
-    promedios = (df_temp.groupby(df_temp['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean().reset_index(name='temp_promedio'))
+    promedios = (df_temp.groupby(df_temp['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean())
     df_pers = db1.loc[db1["unique_id"] == 'Ocupacion']
     if len(df) >= 2:
         diferencia = (df["value"].iloc[-1] - df["value"].iloc[-2])
@@ -352,26 +363,25 @@ def display_intern_cond(db1,db2):
         with col2:
             st.metric("⚡Consumo", f"{round(df['value'].iloc[-1],1)} kWh", delta=f"{round(diferencia,1)} kWh", delta_color="inverse")
         with col3:
-            st.metric("🌡️ Temperatura",f"{promedios['temp_promedio'].iloc[-1]:.1f} °C")
+            st.metric("🌡️ Temperatura",f"{promedios.iloc[-1]:.1f} °C")
+    return promedios.iloc[-1]
 
-def display_smart_control(db1,db2):
+def display_smart_control(db1,db2,t_int):
     personas = db1.loc[db1["unique_id"] == 'Ocupacion'].iloc[-1,2]
-    t_int = db1.groupby(db1['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean().reset_index(name='temp_promedio').iloc[-1,1]
     t_ext = db2['T2M'].iloc[-1]
     with st.container(border=True):
          st.markdown("#### Control Edificio")
          with st.container(key="styled_tabs_2"):
               tab1, tab2 = st.tabs(["Programación Estándar", "Programación IA"])
               with tab1.container(key='cont-BMS'):
-                  with open("BMS/programaciónBMS_estandar.html", 'r', encoding='utf-8') as f:
-                      html_content = f.read()
-                      components.html(html_content, height=400, scrolling=True)
+                  graficar_intensidad_heatmap("BMS/programacion_bms.xlsx")
 
               with tab2.container(key='cont-BMS-IA'):
                   ruta = 'BMS/programacion_bms.xlsx'
                   resultado, pronostico, base = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
                   st.info(resultado)
                   unidades = seleccionar_unidades(pronostico, base)
+                  st.write(unidades)
                   cols = st.columns(5)
                   estados = {}
                   for i, col in enumerate(cols):
@@ -380,7 +390,13 @@ def display_smart_control(db1,db2):
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
 
-                  components.iframe('http://192.168.5.200:3000/Piso_1_Lado_B', height=400, scrolling=True)
+                  url = "http://192.168.5.200:3000/Piso_1_Lado_B"
+                  res = requests.get(url)
+
+                  if res.status_code == 200:
+                      components.html(res.text, height=600, scrolling=True)
+                  else:
+                      st.error("No se pudo cargar la página")
 
 def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
     df = pd.read_excel(ruta, usecols=[0,1,2,3],
@@ -396,23 +412,31 @@ def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
     if base.empty:
         return f"No hay programación registrada para {dia} a las {h}:00 horas."
     b = base.iat[0]
-    p = max(0,min(100, b -5*(25-temp_externa) - (100 if num_personas<5 else 50 if num_personas<10 else 25 if num_personas<20 else -50 if num_personas>=30 else 0) +2*(temp_interna-25)))
+    p = max(0, min(100, b - 1 * (25 - temp_externa) - (100 if num_personas < 5 else 50 if num_personas < 10 else 25 if num_personas < 20 else -50 if num_personas >= 30 else 0) + 1.5 * (temp_interna - 25)))
     msg = (f"Hoy, {dia} a las {h}:00, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
-          f"Ahora, dado que hay {num_personas} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
+          f"Ahora, dado que hay {num_personas:.0f} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
     return msg, p, b
 
 def seleccionar_unidades(pred, intensidad_base):
-    tabla = {0:   [0]*5,
-             15:  [1,0,0,0,0],
-             25:  [1,0,1,0,0],
-             50:  [1,0,1,1,0],
-             75:  [1,0,1,1,1],100: [1]*5,
-             "automatico": [2]*5}
-    if abs(pred - intensidad_base) < 10:
-        return tabla["automatico"]
-    # Si no, elegimos la intensidad entera más alta ≤ pred (o 0 por defecto)
-    mejor = max((i for i in tabla if isinstance(i, int) and i <= pred), default=0)
-    return tabla[mejor]
+    tabla_intensidad = {
+        0:  [0, 0, 0, 0, 0],
+        15: [1, 0, 0, 0, 0],
+        25: [1, 0, 1, 0, 0],
+        50: [1, 0, 1, 1, 0],
+        75: [1, 0, 1, 1, 1],
+        100:[1, 1, 1, 1, 1],
+    }
+
+    diferencia = abs(pred - intensidad_base)
+    intensidades = sorted(tabla_intensidad.keys())
+
+    if diferencia < 10:
+        intensidad_cercana = max([i for i in intensidades if i <= intensidad_base], default=0)
+    else:
+        intensidad_cercana = max([i for i in intensidades if i <= pred], default=0)
+
+    return tabla_intensidad[intensidad_cercana]
+
 
 def get_IA_model():
     IA_model = load_model('models/NILM_Model_best.keras')
@@ -426,6 +450,45 @@ def datos_Exog(db, datos):
     fut['Hour'] = fut['ds'].dt.hour
     fut = fut.merge(datos.drop(columns='PRECTOTCORR', errors='ignore'), on='ds', how='left')
     return fut[['ds','Energia_kWh_General','DOW','Hour','T2M','RH2M']].sort_values(['ds'])
+
+def reconcile(exog, pron):
+    r = np.copy(pron)
+    d = exog['Energia_kWh_General'] - (r[:,0] - r[:,1] + r[:,2])
+    for i in range(len(r)):
+        dow, h, di = exog['DOW'][i], exog['Hour'][i], r[i]
+        wknd, work, sun, dia = dow in (6,7), 8<=h<=16, 11<=h<=13, 6<=h<=18
+
+        if not dia:
+            di[1], di[2] = 0, di[2] + d[i]
+        elif wknd:
+            di[2] += d[i]
+        elif work:
+            if sun:
+                adj = min(d[i], di[1])
+                di[1] -= adj
+                di[2] += d[i] - adj
+            else:
+                adj = min(d[i]*0.5, di[1])
+                di[1] -= adj
+                di[2] += d[i] - adj
+        else:
+            adj = min(d[i], di[1])
+            di[1] -= adj
+            di[2] += d[i] - adj
+
+        if dia and not wknd and not work and not sun:
+            t = di[1] + di[2]
+            if t > 0:
+                di[1] += d[i] * di[1]/t
+                di[2] += d[i] * di[2]/t
+            else:
+                di[1] += d[i]*0.5
+                di[2] += d[i]*0.5
+
+        di[1] = max(di[1], 0)
+        di[2] = max(di[2], 0)
+
+    return r
 
 # Método principal
 def main():
@@ -450,7 +513,8 @@ def main():
     caracteristicas = datos_Exog(db_pow, datos).drop(columns=['ds'])
     car2 = caracteristicas.copy()
     y_hat_raw = modelo_IA.predict(caracteristicas.values.reshape(-1, 1, caracteristicas.shape[1]))
-    Y_hat_df2 = pd.DataFrame(y_hat_raw, columns=['Aires Acondicionados','SSFV','Otros'])
+    Y_hat_rec = reconcile(car2,y_hat_raw)
+    Y_hat_df2 = pd.DataFrame(Y_hat_rec, columns=['Aires Acondicionados','SSFV','Otros'])
 
     Y_hat_df2.index = db_pow.loc[db_pow["unique_id"] == 'General', "ds"].reset_index(drop=True)
     metrics = get_metrics(db_pow.loc[db_pow["unique_id"] == 'General',"value"].iloc[-1],
@@ -461,11 +525,10 @@ def main():
     inject_css()
 
     with tab1.container(key='cont-nilm'):
-        display_extern_cond(datos)
+        #display_extern_cond(datos)
         submedidores = get_submedidores(metrics)
         with st.container(border=True):
-            st.subheader("Medición Desagregada")
-            display_general(icons, metrics, db_pow)
+            display_general(icons, metrics, db_pow, Y_hat_df2)
             st.markdown("<div style='text-align:center; margin-top: -20px; font-size:33px;'> ┌──────────────┼──────────────┐<br></div>", unsafe_allow_html=True)
             display_submedidores(submedidores, nombres_submedidores, icons, metrics, db_pow, Y_hat_df2)
 
@@ -474,9 +537,9 @@ def main():
         with col1:
             display_extern_cond(datos,False,lat,lon)
         with col2:
-            display_intern_cond(db_oth,db_pow)
+            prom = display_intern_cond(db_oth,db_pow)
 
-        display_smart_control(db_oth,datos)
+        display_smart_control(db_oth,datos,prom)
 
     zona = pytz.timezone("America/Bogota")
     ahora = pd.Timestamp(datetime.now(zona)).floor('15min').strftime("%Y-%m-%d %H:%M:%S")
