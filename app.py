@@ -287,6 +287,7 @@ def display_general(icons, metrics, db):
                 df = db.loc[db["unique_id"] == 'General',['ds','value']]
                 graficar_consumo(df,None,f"Consumo: Medidor General")
 
+
 # Función para mostrar los submedidores
 def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, pron):
     cols = st.columns(len(submedidores))
@@ -298,9 +299,12 @@ def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db,
                 with ca:
                     mostrar_imagen(icons[label], 100)
                 with cb:
-                    porc = (pron.iloc[-1,i]/db.loc[db["unique_id"] == 'General',['value']].iloc[-1,0])*100
+                    st.write()
+                    #porc = (pron.iloc[-1,i]/db.loc[db["unique_id"] == 'General',['value']].iloc[-1,0])*100
+                    
+                    porc = (pron.iloc[-1,i]/sum(pron.iloc[-1,:]))*100
                     st.metric(label=nombre, value=f"{metrics[label]['energia']} kWh ({porc:.1f}%)")
-              
+
                 key_btn = f"butt_{nombre}"
                 key_vis = f"vis_{nombre}"
 
@@ -395,7 +399,7 @@ def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
     p = max(0,min(100, b -5*(25-temp_externa) - (100 if num_personas<5 else 50 if num_personas<10 else 25 if num_personas<20 else -50 if num_personas>=30 else 0) +2*(temp_interna-25)))
     msg = (f"Hoy, {dia} a las {h}:00, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
           f"Ahora, dado que hay {num_personas} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
-    return msg, p, b 
+    return msg, p, b
 
 def seleccionar_unidades(pred, intensidad_base):
     tabla = {0:   [0]*5,
@@ -411,8 +415,8 @@ def seleccionar_unidades(pred, intensidad_base):
     return tabla[mejor]
 
 def get_IA_model():
-    #IA_model = load_model('models/NILM_Model_best.keras')
-    IA_model = load_model('models/NILM_Model.keras')
+    IA_model = load_model('models/NILM_Model_best.keras')
+    #IA_model = load_model('models/NILM_Model.keras')
     return IA_model
 
 def datos_Exog(db, datos):
