@@ -127,28 +127,26 @@ def get_climate_data_1m(lat, lon):
 
 def graficar_consumo(df,pron,sub):
     fig = go.Figure()
-    colores=('gray','orange','green')
-    y_stack = df["value"]
+    
     if not sub:
-        fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
-        orden = ["SSFV", "Otros", "Aires Acondicionados"]
-        for i in orden:
-            y_stack = y_stack + pron[i] if i == orden[0] else y_stack - pron[i]
-            fig.add_trace(go.Scatter(x=df["ds"], y=y_stack, mode='lines',
-                                    line=dict(width=0.5), fill='tonexty', hoverinfo='x+y',name=i))
+        fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] > 0, -pron['SSFV'], - pron["SSFV"] + pron['Otros'] + pron["Aires Acondicionados"]),name="Solar",marker_color="orange"))
+        fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] > 0, pron['Otros'], 0), name="Otros",marker_color="gray"))
+        fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] > 0, - pron['SSFV'] + pron['Aires Acondicionados'], 0),name="Aires Acondicionados",marker_color="lightblue"))
+        fig.add_trace(go.Scatter(x=df["ds"], y=round(df["value"],1), mode="lines",name='General',line=dict(color='black')))
+    
     else:
         fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
         fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines",name='Pronosticado'))
-    fig.update_layout(title="", margin=dict(t=10, b=0),
+    fig.update_layout(title="", margin=dict(t=30, b=0), barmode="relative",
                       xaxis=dict(domain=[0.1, 0.99],title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False),
-                      yaxis_title="Consumo (kWh)",legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.7, yanchor="top"), height=200)
+                      yaxis_title="Consumo (kWh)",legend=dict(orientation="h", x=0.5, xanchor="center", y=1.4, yanchor="top"), height=200)
     st.plotly_chart(fig, use_container_width=True)
 
 def graficar_intensidad_heatmap(ruta_excel):
     df = pd.read_excel(ruta_excel)
     df["dia_semana"] = pd.Categorical(df["dia_semana"], categories=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], ordered=True)
     tabla = df.pivot(index='dia_semana', columns='hora', values='intensidad')
-    custom_text = [[f"Día: {dia}<br>Hora: {hora}<br>Intensidad: {tabla.loc[dia, hora]:.1f}" for hora in tabla.columns] for dia in tabla.index]	
+    custom_text = [[f"Día: {dia}<br>Hora: {hora}<br>Intensidad: {tabla.loc[dia, hora]:.1f}" for hora in tabla.columns] for dia in tabla.index]
     fig = go.Figure(go.Heatmap(z=tabla.values, x=tabla.columns, y=tabla.index,colorscale='Viridis', colorbar_title='Intensidad', text=custom_text, hoverinfo='text', xgap=1, ygap=1))
     fig.update_layout(title='Programación de Intensidad Habitual de Aires', xaxis=dict(title='Hora', showgrid=True), yaxis=dict(title='Día', showgrid=True), template='simple_white')
     st.plotly_chart(fig, use_container_width=True)
@@ -183,10 +181,10 @@ def get_icons():
 # Función para obtener las métricas
 def get_metrics(general, ac, ssfv, otros):
     return {
-        "General": {"energia": f"{general:.2f}"},
-        "AC": {"energia": f"{ac:.2f}"},
-        "SSFV": {"energia": f"{-ssfv:.2f}"},
-        "Otros": {"energia": f"{otros:.2f}"},
+        "General": {"energia": f"{general:.1f}"},
+        "AC": {"energia": f"{ac:.1f}"},
+        "SSFV": {"energia": f"{-ssfv:.1f}"},
+        "Otros": {"energia": f"{otros:.1f}"},
     }
 
 # Submedidores dinámicos
@@ -202,15 +200,16 @@ def inject_css():
     body, h1, h2, h3, h4, h5, h6, p, .stDataFrame, .stButton>button, .stMetricValue {
         font-family: 'Poppins' !important;
     }
-    
+
     .block-container {
-        padding-top: 1rem;    
+        padding-top: 1rem;
     }
-    
+
     [data-testid="stMetric"] {
         width: fit-content!important;
         margin: auto;
     }
+
 
     [data-testid="stMetric"] > div {
         width: fit-content!important;
@@ -219,6 +218,7 @@ def inject_css():
 
     [data-testid="stMetric"] label {
         #width: fit-content!important;
+        font-size:2em!important;
         margin: auto;
     }
 
@@ -253,6 +253,10 @@ def inject_css():
         font-size: 1.3em !important;
         font-family: 'Poppins';
     }
+
+    div[data-testid="metric-container"] > label[data-testid="stMetricDelta"] > div {
+			font-size: large;
+}
 
     div[data-testid="stMetric"] {
         padding: 15px;
@@ -297,9 +301,9 @@ def display_general(icons, metrics, db, pron):
     with st.container(border=True):
         colg,colh = st.columns([1, 2], vertical_alignment='center')
         with colg:
-            ca,cb = st.columns([1, 2], vertical_alignment='top')
+            ca,cb = st.columns([1, 2], vertical_alignment='center')
             with ca:
-                mostrar_imagen(icons['General'], 100)
+                mostrar_imagen(icons['General'], 200)
             with cb:
                 st.metric(label="Medición General", value=metrics['General']['energia']+" kWh (100%)")
 
@@ -390,12 +394,12 @@ def display_smart_control(db1,db2,t_int):
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
 
-                  #url = "http://192.168.5.200:3000/Piso_1_Lado_B"
-                  url = "https://www.google.com.co"
+                  url = "http://192.168.5.200:3000/Piso_1_Lado_B"
+                  #url = "https://www.google.com.co"
                   res = requests.get(url)
 
                   if res.status_code == 200:
-                      components.html(res.text, height=600, scrolling=True)
+                      components.iframe(res.text, height=600, scrolling=True)
                   else:
                       st.error("No se pudo cargar la página")
 
@@ -454,7 +458,7 @@ def datos_Exog(db, datos):
 
 def reconcile(exog, pron):
     r = np.copy(pron)
-    d = exog['Energia_kWh_General'] - (r[:,0] - r[:,1] + r[:,2])
+    d = round(exog['Energia_kWh_General'],1) - (r[:,0] - r[:,1] + r[:,2])
     for i in range(len(r)):
         dow, h, di = exog['DOW'][i], exog['Hour'][i], r[i]
         wknd, work, sun, dia = dow in (6,7), 8<=h<=16, 11<=h<=13, 6<=h<=18
