@@ -65,7 +65,7 @@ def read_bq_db(credentials):
 
     # Leer datos de BigQuery
     query = f"SELECT * FROM `{TABLA_COMPLETA}` ORDER BY datetime_record ASC"
-    df = (pd.read_gbq(query, project_id=BIGQUERY_PROJECT_ID, credentials=credentials)
+    df = (read_gbq(query, project_id=BIGQUERY_PROJECT_ID, credentials=credentials)
           .rename(columns={'id': 'unique_id', 'datetime_record': 'ds'}))
 
     # Separar en potencia y resto
