@@ -399,7 +399,7 @@ def display_smart_control(db1,db2,t_int):
                   res = requests.get(url)
 
                   if res.status_code == 200:
-                      components.iframe(res.text, height=600, scrolling=True)
+                      components.html(res.text, height=600, scrolling=True)
                   else:
                       st.error("No se pudo cargar la página")
 
