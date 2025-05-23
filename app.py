@@ -394,8 +394,8 @@ def display_smart_control(db1,db2,t_int):
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
 
-                  url = "http://192.168.5.200:3000"
-                  #url = "https://www.google.com.co"
+                  #url = "http://192.168.5.200:3000"
+                  url = "https://www.google.com.co"
                   res = requests.get(url)
 
                   if res.status_code == 200:
