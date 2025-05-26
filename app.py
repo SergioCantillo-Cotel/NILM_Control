@@ -415,6 +415,10 @@ def display_smart_control(db1,db2,t_int):
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
     dia_str = fecha.strftime('%A')
+    dias_es = {'Monday': 'Lunes','Tuesday': 'Martes','Wednesday': 'Miércoles',
+               'Thursday': 'Jueves','Friday': 'Viernes','Saturday': 'Sábado',
+               'Sunday': 'Domingo'}
+    dia_S = dias_es[dia_str]
     h = fecha.hour
     festivos = holidays.CountryHoliday('CO', years=fecha.year)
     
@@ -440,7 +444,7 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
                  4 if delta <= 5 else
                  6 if delta <= 10 else 7)
 
-    return (f"Hoy, {dia_str} a las {h}:{fecha.minute:02}, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
+    return (f"Hoy, {dia_S} a las {h}:{fecha.minute:02}, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
             f"Ahora, dado que hay {num_personas:.0f} personas en la sede, temperaturas externa e interna de {temp_ext:.1f} °C y {temp_int:.1f} °C respectivamente, "
             f"el modelo IA sugiere una intensidad de {p:.0f}% con una velocidad de ventiladores de {categoria}"), p, b
 
