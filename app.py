@@ -397,7 +397,7 @@ def display_smart_control(db1,db2,t_int):
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
                   
-                  file_ = open("/content/Piso-1-lado-A-aires-Encendidos.gif", "rb")
+                  file_ = open("Piso-1-lado-A-aires-Encendidos.gif", "rb")
                   contents = file_.read()
                   data_url = base64.b64encode(contents).decode("utf-8")
                   file_.close()
