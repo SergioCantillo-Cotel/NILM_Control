@@ -397,7 +397,7 @@ def display_smart_control(db1,db2,t_int):
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
                   
-                  file_ = open("Piso-1-lado-A-aires-Encendidos.gif", "rb")
+                  file_ = open("/content/Piso-1-lado-A-aires-Encendidos.gif", "rb")
                   contents = file_.read()
                   data_url = base64.b64encode(contents).decode("utf-8")
                   file_.close()
@@ -405,11 +405,11 @@ def display_smart_control(db1,db2,t_int):
                   st.markdown(f'<img src="data:image/gif;base64,{data_url}" alt="cat gif">',unsafe_allow_html=True)
                   col1, col2, col3 = st.columns(3)
                   with col1:
-                      st.markdown('<a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a></div>',unsafe_allow_html=True)
                   with col2:
-                      st.markdown('<a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a></div>',unsafe_allow_html=True)
                   with col3:
-                      st.markdown('<a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a></div>',unsafe_allow_html=True)
                   
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
