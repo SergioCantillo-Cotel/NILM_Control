@@ -409,6 +409,14 @@ def display_smart_control(db1,db2,t_int):
                       '<a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a>',
                       unsafe_allow_html=True
                   )
+                  st.markdown(
+                      '<a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a>',
+                      unsafe_allow_html=True
+                  )
+                  st.markdown(
+                      '<a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a>',
+                      unsafe_allow_html=True
+                  )
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
