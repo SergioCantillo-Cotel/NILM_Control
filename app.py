@@ -401,17 +401,15 @@ def display_smart_control(db1,db2,t_int):
                   data_url = base64.b64encode(contents).decode("utf-8")
                   file_.close()
 
-                  st.markdown(
-                      f'<img src="data:image/gif;base64,{data_url}" alt="cat gif">',
-                      unsafe_allow_html=True,
-                  )
-                  col1, col2, col3 = st.columns(3)
+                  st.markdown(f'<img src="data:image/gif;base64,{data_url}" alt="cat gif">',unsafe_allow_html=True)
+                  
+		  col1, col2, col3 = st.columns(3)
                   with col1:
                       st.markdown('<a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a>',unsafe_allow_html=True)
                   with col2:
                       st.markdown('<a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a>',unsafe_allow_html=True)
 		  with col3:
-                      st.markdown('<a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a>',unsafe_allow_html=True)
+		      st.markdown('<a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a>',unsafe_allow_html=True)
                   
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
