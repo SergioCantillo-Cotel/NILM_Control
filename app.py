@@ -96,7 +96,7 @@ def get_climate_data_1m(lat, lon):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
       "latitude": lat, "longitude": lon,
-      "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation"],
+      "hourly": ["apparent_temperature", "relative_humidity_2m", "precipitation"],
       "start_date": "2025-05-15",
 	    "end_date": ""+datetime.now().strftime("%Y-%m-%d"),
     }
@@ -383,9 +383,11 @@ def display_smart_control(db1,db2,t_int):
               with tab2.container(key='cont-BMS-IA'):
                   ruta = 'BMS/programacion_bms.xlsx'
                   resultado, pronostico, base = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
-                  st.info(resultado)
+                  st.error(resultado)
+                  st.warning(resultado)
+                  st.success(resultado)
                   unidades = seleccionar_unidades(pronostico, base)
-                  st.write(unidades)
+                  #st.write(unidades)
                   cols = st.columns(5)
                   estados = {}
                   for i, col in enumerate(cols):
@@ -393,34 +395,52 @@ def display_smart_control(db1,db2,t_int):
                           # si el valor es 1 o 2, lo marcamos como True
                           inicial = unidades[i] == 1
                           estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
+                  
+                  file_ = open("/content/Piso-1-lado-A-aires-Encendidos.gif", "rb")
+                  contents = file_.read()
+                  data_url = base64.b64encode(contents).decode("utf-8")
+                  file_.close()
 
-                  #url = "http://192.168.5.200:3000"
-                  url = "https://www.google.com.co"
-                  res = requests.get(url)
+                  st.markdown(
+                      f'<img src="data:image/gif;base64,{data_url}" alt="cat gif">',
+                      unsafe_allow_html=True,
+                  )
+                  st.markdown(
+                      '<a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a>',
+                      unsafe_allow_html=True
+                  )
 
-                  if res.status_code == 200:
-                      components.html(res.text, height=600, scrolling=True)
-                  else:
-                      st.error("No se pudo cargar la página")
-
-def agenda_bms(ruta, fecha, num_personas, temp_externa, temp_interna):
-    df = pd.read_excel(ruta, usecols=[0,1,2,3],
-                       names=['dia','hora','_','intensidad'])
-    dias = {'Monday':'Lunes','Tuesday':'Martes','Wednesday':'Miércoles',
-            'Thursday':'Jueves','Friday':'Viernes','Saturday':'Sábado','Sunday':'Domingo'}
-    dia = dias[fecha.strftime('%A')]
+def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
+    df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
+    dia_str = fecha.strftime('%A')
     h = fecha.hour
-    base = df.loc[(df.dia==fecha.strftime('%A'))&(df.hora==h),'intensidad']
-    fest = pd.to_datetime(list(holidays.CountryHoliday('CO', years=fecha.year).keys())).date
-    if fecha.date() in fest:
-        return f"Hoy es {dia} y la hora actual es {h}, la programación Estándar del BMS es: Intensidad de Aires 0 %"
+    festivos = holidays.CountryHoliday('CO', years=fecha.year)
+    
+    if fecha.date() in festivos:
+        return f"Hoy es {dia_str} y la hora actual es {h}, la programación Estándar del BMS es: Intensidad de Aires 0 %"
+    
+    base = df.query("dia == @dia_str and hora == @h")['intensidad']
     if base.empty:
-        return f"No hay programación registrada para {dia} a las {h}:00 horas."
+        return f"No hay programación registrada para {dia_str} a las {h}:00 horas."
+    
     b = base.iat[0]
-    p = max(0, min(100, b - 1 * (25 - temp_externa) - (100 if num_personas < 5 else 50 if num_personas < 10 else 25 if num_personas < 20 else -50 if num_personas >= 30 else 0) + 1.5 * (temp_interna - 25)))
-    msg = (f"Hoy, {dia} a las {h}:00, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
-          f"Ahora, dado que hay {num_personas:.0f} personas en la sede, temperaturas externa e interna de {temp_externa:.1f} °C y {temp_interna:.1f} °C respectivamente, el modelo IA sugiere una intensidad de {p:.0f}%")
-    return msg, p, b
+    ajuste_personas = (-100 if num_personas < 5 else
+                       -50 if num_personas < 10 else
+                       -25 if num_personas < 20 else
+                       0 if num_personas < 40 else
+                       25 if num_personas < 50 else 50)
+    
+    p = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
+    delta = p - b
+
+    categoria = (1 if delta < -10 else
+                 2 if delta < -5 else
+                 4 if delta <= 5 else
+                 6 if delta <= 10 else 7)
+
+    return (f"Hoy, {dia_str} a las {h}:{fecha.minute:02}, la programación Estándar del BMS indica que la Intensidad de Aires esté al {b}%.\n"
+            f"Ahora, dado que hay {num_personas:.0f} personas en la sede, temperaturas externa e interna de {temp_ext:.1f} °C y {temp_int:.1f} °C respectivamente, "
+            f"el modelo IA sugiere una intensidad de {p:.0f}% con una velocidad de ventiladores de {categoria}"), p, b
 
 def seleccionar_unidades(pred, intensidad_base):
     tabla_intensidad = {
