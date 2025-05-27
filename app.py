@@ -384,11 +384,8 @@ def display_smart_control(db1,db2,t_int):
               with tab2.container(key='cont-BMS-IA'):
                   ruta = 'BMS/programacion_bms.xlsx'
                   resultado, pronostico, base = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
-                  st.error(resultado)
-                  st.warning(resultado)
-                  st.success(resultado)
+                  st.info(resultado)
                   unidades = seleccionar_unidades(pronostico, base)
-                  #st.write(unidades)
                   cols = st.columns(5)
                   estados = {}
                   for i, col in enumerate(cols):
