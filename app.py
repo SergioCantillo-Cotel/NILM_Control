@@ -80,7 +80,7 @@ def read_bq_db(credentials):
 
     # Procesar el resto: solo mapeo de identificadores
     df_other['unique_id'] = df_other['unique_id'].map(_MAPPING)
-
+    st.write(df_other)
     return df_power, df_other
 
 def gen_others_load(df):
