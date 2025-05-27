@@ -426,12 +426,12 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     if base.empty:
         return f"No hay programación registrada para {dia_str} a las {h}:00 horas."
     
-    b = base.iat[0]
+    b = base.iat[0]	
     ajuste_personas = (-100 if num_personas < 5 else
                        -50 if num_personas < 10 else
                        -25 if num_personas < 20 else
-                       0 if num_personas < 40 else
-                       25 if num_personas < 50 else 50)
+                       -15 if num_personas < 40 else 
+                       0 if num_personas > 40 else 0)
     
     p = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
     delta = p - b
