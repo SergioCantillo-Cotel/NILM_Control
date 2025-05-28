@@ -441,8 +441,7 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     p = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
     delta = p - b
 
-    categoria = (0 if delta < -20 else
-	    	 1 if delta < -10 else
+    categoria = (1 if delta < -10 else
                  2 if delta < -5 else
                  4 if delta <= 5 else
                  6 if delta <= 10 else 7)
