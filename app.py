@@ -382,17 +382,23 @@ def display_smart_control(db1,db2,t_int):
 
               with tab2.container(key='cont-BMS-IA'):
                   ruta = 'BMS/programacion_bms.xlsx'
-                  resultado, pronostico, base = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
+                  resultado, pronostico, base, vel = agenda_bms(ruta,datetime.now()-pd.Timedelta(hours=5),personas,t_ext,t_int)
                   st.info(resultado)
                   unidades = seleccionar_unidades(pronostico, base)
                   cols = st.columns(5)
                   estados = {}
                   for i, col in enumerate(cols):
                       with col:
-                          # si el valor es 1 o 2, lo marcamos como True
-                          inicial = unidades[i] == 1
-                          estados[f"aire_{i+1}"] = st.toggle(f"Aire {i+1}", value=inicial, key=f"aire_{i+1}")
-                  
+                          col.markdown(f"<div style='text-align: center;'>Aire {i+1}</div>", unsafe_allow_html=True)
+                          if unidades[i] == 1:
+                              estados[f"aire_{i+1}"] = col.success("🟢 Encendido")
+                              col.progress(vel/7)
+                          elif unidades[i] == 0:
+                              estados[f"aire_{i+1}"] = col.error("🔴 Apagado")
+                              col.progress(0)
+                          elif unidades[i] == 2:
+                              estados[f"aire_{i+1}"] = col.warning("🤖 Auto")
+
                   file_ = open("Piso-1-lado-A-aires-Encendidos.gif", "rb")
                   contents = file_.read()
                   data_url = base64.b64encode(contents).decode("utf-8")
@@ -405,7 +411,7 @@ def display_smart_control(db1,db2,t_int):
                   with col2:
                       st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a></div>',unsafe_allow_html=True)
                   with col3:
-                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a></div>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_ 1: Lado B</a></div>',unsafe_allow_html=True)
                   
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
