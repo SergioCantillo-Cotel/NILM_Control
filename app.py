@@ -409,9 +409,9 @@ def display_smart_control(db1,db2,t_int):
                   with col1:
                       st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a></div>',unsafe_allow_html=True)
                   with col2:
-                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a></div>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_1: Lado B</a></div>',unsafe_allow_html=True)
                   with col3:
-                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_ 1: Lado B</a></div>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2</a></div>',unsafe_allow_html=True)
                   
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
