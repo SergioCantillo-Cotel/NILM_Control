@@ -359,20 +359,24 @@ def display_intern_cond(db1,db2):
         diferencia = None
     with st.container(border=True):
         st.markdown("#### Condiciones Internas")
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             st.metric("👥 Personas", f"{df_pers['value'].iloc[-1]:.0f}")
             st.markdown('<br>',unsafe_allow_html=True)
         with col2:
             st.metric("⚡Consumo", f"{round(df['value'].iloc[-1],1)} kWh", delta=f"{round(diferencia,1)} kWh", delta_color="inverse")
-        with col3:
-            st.metric("🌡️ Temperatura",f"{promedios.iloc[-1]:.1f} °C")
+        
     return promedios.iloc[-1]
-
 
 def display_smart_control(db1,db2,t_int):
     personas = db1.loc[db1["unique_id"] == 'Ocupacion'].iloc[-1,2]
     t_ext = db2['T2M'].iloc[-1]
+    df_temp = db1.loc[db1["unit"] == '°C']
+    Z1 = df_temp[(df_temp['unique_id'] == 'T1')|(df_temp['unique_id'] == 'T2')][['value']].mean()
+    Z2 = df_temp[(df_temp['unique_id'] == 'T3')|(df_temp['unique_id'] == 'T4')][['value']].mean()
+    Z3 = df_temp[(df_temp['unique_id'] == 'T5')|(df_temp['unique_id'] == 'T6')][['value']].mean()
+    Z4 = df_temp[(df_temp['unique_id'] == 'T7')|(df_temp['unique_id'] == 'T8')][['value']].mean()
+    Z5 = df_temp[(df_temp['unique_id'] == 'T9')|(df_temp['unique_id'] == 'T10')][['value']].mean()
     with st.container(border=True):
          st.markdown("#### Control Edificio")
          with st.container(key="styled_tabs_2"):
@@ -387,6 +391,18 @@ def display_smart_control(db1,db2,t_int):
                   unidades = seleccionar_unidades(pronostico, base)
                   cols = st.columns(5)
                   estados = {}
+
+                  with cols[0]:
+                      cols[0].metric("🌡️ Temp. Zona 1",f"{Z1.iloc[-1]:.1f} °C")
+                  with cols[1]:
+                      cols[1].metric("🌡️ Temp. Zona 2",f"{Z2.iloc[-1]:.1f} °C")
+                  with cols[2]:
+                      cols[2].metric("🌡️ Temp. Zona 3",f"{Z3.iloc[-1]:.1f} °C")
+                  with cols[3]:
+                      cols[3].metric("🌡️ Temp. Zona 4",f"{Z4.iloc[-1]:.1f} °C")
+                  with cols[4]:
+                      cols[4].metric("🌡️ Temp. Zona 5",f"{Z5.iloc[-1]:.1f} °C")
+
                   for i, col in enumerate(cols):
                       with col:
                           col.markdown(f"<div style='text-align: center;'>Aire {i+1}</div>", unsafe_allow_html=True)
@@ -398,7 +414,7 @@ def display_smart_control(db1,db2,t_int):
                               col.progress(0)
                           elif unidades[i] == 2:
                               estados[f"aire_{i+1}"] = col.warning("🤖 Auto")
-
+                  
                   file_ = open("Piso-1-lado-A-aires-Encendidos.gif", "rb")
                   contents = file_.read()
                   data_url = base64.b64encode(contents).decode("utf-8")
@@ -409,10 +425,9 @@ def display_smart_control(db1,db2,t_int):
                   with col1:
                       st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/" target="_blank">Piso 1: Lado A</a></div>',unsafe_allow_html=True)
                   with col2:
-                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_1: Lado B</a></div>',unsafe_allow_html=True)
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2: Lado A</a></div>',unsafe_allow_html=True)
                   with col3:
-                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_2" target="_blank">Piso 2</a></div>',unsafe_allow_html=True)
-                  
+                      st.markdown('<div style="text-align: center;"><a href="http://192.168.5.200:3000/Piso_1_Lado_B" target="_blank">Piso 1: Lado B</a></div>',unsafe_allow_html=True)
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
