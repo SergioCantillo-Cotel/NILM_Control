@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+
+body, h1, h2, h3, h4, h5, h6, p, .stDataFrame, .stButton>button, .stMetricValue {
+    font-family: 'Poppins' !important;
+}
+
+.block-container {
+    padding-top: 0.2rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+[data-testid="stMetric"] {
+    width: fit-content!important;
+    margin: auto;
+}
+
+[data-testid="stMetric"] > div {
+    width: fit-content!important;
+    margin: auto;
+}
+
+[data-testid="stMetric"] label {
+    #width: fit-content!important;
+    font-size:1.3em!important;
+    margin: auto;
+}
+
+div[data-testid="stMetric"] > div:nth-child(2) {
+    font-family: 'Poppins';
+    font-size: 1.8em!important;
+}
+
+.stButton {
+    display: flex;
+    justify-content: center;
+    margin-top: 0em;
+}
+
+.stButton > button {
+    background-color: #fcbf06;
+    border: none;
+    padding: 0.6em 1.2em;
+    border-radius: 8px;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    width: 80%;
+    margin: auto;
+}
+
+.stButton > button:hover {
+    background-color: #lightgold;
+    color: white;
+}
+
+label[data-testid="stMetricLabel"] p{
+    font-size: 1.4em !important;
+    font-family: 'Poppins';
+}
+
+div[data-testid="metric-container"] > label[data-testid="stMetricDelta"] > div {
+  	font-size: medium!important;
+    font-family: 'Poppins'
+}
+
+div[data-testid="stMetric"] {
+    padding: 2px;
+    color: white;
+    font-family: 'Poppins';
+}
+
+button[data-baseweb="tab"] p{
+    font-size:16px!important;
+    font-weight: bold;
+    padding:7px;
+}
+
+.st-key-styled_tabs button[aria-selected="true"]{
+    background-color:#eeeeee;
+    border-radius:5px;
+}
+
+.st-key-styled_tabs div[data-baseweb="tab-panel"]{
+    border-radius:5px;
+    padding:7px;
+    background-color:#ffffff;
+}
+
+div[data-testid="stProgress"] > div > div > div {
+    height: 20px;
+    border-radius: 10px;
+    background-color: #b0b0b0 !important;
+}
+
+div[data-testid="stProgress"] > div > div > div > div {
+    height: 20px;
+    border-radius: 10px;
+    background-color: #00cc66 !important;
+}
