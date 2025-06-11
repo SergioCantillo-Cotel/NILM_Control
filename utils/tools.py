@@ -67,7 +67,7 @@ def get_climate_data_1m(lat, lon):
     session = retry(requests_cache.CachedSession('.cache', expire_after=3600), retries=5, backoff_factor=0.2)
     r = openmeteo_requests.Client(session=session).weather_api("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon, "models": "gfs_seamless",
-        "minutely_15": ["apparent_temperature", "relative_humidity_2m", "precipitation"],
+        "minutely_15": ["temperature_2m", "relative_humidity_2m", "precipitation"],
         "start_date": "2025-05-15", "end_date": datetime.now().strftime("%Y-%m-%d")})[0].Minutely15()
     idx = pd.date_range(start=pd.to_datetime(r.Time(), unit="s"), end=pd.to_datetime(r.TimeEnd(), unit="s"),
                         freq=pd.Timedelta(seconds=r.Interval()), inclusive="left")
