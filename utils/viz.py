@@ -1,6 +1,6 @@
 import streamlit as st
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -205,8 +205,8 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                     estilo(estado)
                 
         with tab3.container(key='cont-BMS-IA'):
-            dia, pronostico = tools.agenda_bms(ruta, datetime.now(), personas, t_ext, t_int)
-            unidades, vel, resultado = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now(),dia)
+            dia, pronostico = tools.agenda_bms(ruta, datetime.now() - timedelta(hours=5), personas, t_ext, t_int)
+            unidades, vel, resultado = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now() - timedelta(hours=5),dia)
             st.info(resultado)
             with st.container(key='SBC-IA'):
                 cols = st.columns(5)
