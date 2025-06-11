@@ -20,8 +20,13 @@ body, h1, h2, h3, h4, h5, h6, p, .stDataFrame, .stButton>button, .stMetricValue 
     margin: auto;
 }
 
+[data-testid="stMetricValue"] div[data-testid="stMetricValue"] label {
+    font-family: 'Poppins' !important;
+    font-size: 2.5em !important;
+}
+
 [data-testid="stMetric"] label {
-    #width: fit-content!important;
+    width: fit-content!important;
     font-size:1.3em!important;
     margin: auto;
 }
@@ -34,7 +39,7 @@ div[data-testid="stMetric"] > div:nth-child(2) {
 .stButton {
     display: flex;
     justify-content: center;
-    margin-top: 0em;
+    margin-top: -1em;
 }
 
 .stButton > button {
@@ -49,7 +54,7 @@ div[data-testid="stMetric"] > div:nth-child(2) {
 }
 
 .stButton > button:hover {
-    background-color: #lightgold;
+    background-color: lightgold;
     color: white;
 }
 
@@ -86,14 +91,82 @@ button[data-baseweb="tab"] p{
     background-color:#ffffff;
 }
 
-div[data-testid="stProgress"] > div > div > div {
-    height: 20px;
-    border-radius: 10px;
-    background-color: #b0b0b0 !important;
+.st-key-ext-cond, .st-key-int-cond, .st-key-temp-zon, .st-key-nilm-gen,
+.st-key-nilm-subm-0, .st-key-nilm-subm-1, .st-key-nilm-subm-2, 
+.st-key-SBC-RT, .st-key-SBC-BMS, .st-key-SBC-IA{
+    padding: 0.7rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-radius: 1rem;
+    margin-bottom: 0rem;
 }
 
-div[data-testid="stProgress"] > div > div > div > div {
-    height: 20px;
-    border-radius: 10px;
-    background-color: #00cc66 !important;
+.custom-metric {
+    background-color: #fff;
+    border-radius: 0.5rem;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    font-family: 'Poppins';
+    user-select: none;
+    font-size: 1.1em;
+    line-height: 1.2;
+    margin-bottom: 1.2rem;
+    font-family: 'Poppins';
+}
+
+.custom-metric .label {
+    font-size: 1.1rem;
+    color: #000;
+    text-align: center;
+    margin-bottom: 0.3rem;
+}
+
+.custom-metric .label-mon {
+    font-size: 1.0rem;
+    color: #000;
+    text-align: center;
+    margin-bottom: 0.3rem;
+}
+
+.custom-metric .value {
+    font-size: 2.1rem;
+    font-weight: 400;
+    text-align: center;
+    color: #111;
+}
+
+.custom-metric .value-mon {
+    font-size: 1.9rem;
+    font-weight: 300;
+    text-align: left;
+    color: #111;
+}
+
+.custom-metric .delta {
+    font-size: 1.6rem;
+    margin-top: 0.3rem;
+    color: #000;
+}
+
+.footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background: white;
+    padding: 0.5rem;
+    text-align: left;
+    font-size: 0.85rem;
+    color: #000;
+    font-family: 'Poppins';
+    box-shadow: 0 -1px 5px rgba(0,0,0,0.05);
+    z-index: 9999;
+}
+
+div[data-baseweb="select"] > div {
+    font-family: 'Poppins';
+    font-size: 14px;
+}
+
+ div[data-baseweb="popover"] li {
+    font-family: 'Poppins';
+    font-size: 14px;
 }
