@@ -6,6 +6,7 @@ import pytz
 
 st.set_page_config(page_title="Eficiencia Energética + IA Cotel", layout="wide")
 tools.load_custom_css()
+tools.quarter_autorefresh()
 st.logo("images/cotel-logotipo.png", size="Large")
 
 NILM = st.Page("pages/NILM.py", title="Cotel - Sede la Flora", icon="🏛️",)
