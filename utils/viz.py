@@ -167,7 +167,7 @@ def display_temp_zonal(db1,db2):
     Z = [df_temp[df_temp["unique_id"].isin(zonas[i:i+2])][['value']].mean().iloc[-1] for i in range(0, 10, 2)]
     with st.container(border=False, key="temp-zon"):
         st.markdown("#### 📍Zonas Monitoreadas")
-        zonas = ['Sala de Juntas <br>Cubículos <br>(P2)',' Gerencia General <br> TI <br> (P2)',
+        zonas = ['Sala de Juntas <br>Cubículos <br>(P2)',' Gerencia <br> Area TI <br> (P2)',
                  'Gestión Humana <br> Eficiencia Preventa <br>(P1)','Contabilidad <br> Sala de Juntas <br> (P1)','Gestión Humana <br> Depto. Jurídico <br> (P1)']
         cols = st.columns(5, vertical_alignment='bottom')
         for i, col in enumerate(cols):
