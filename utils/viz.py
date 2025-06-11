@@ -163,15 +163,15 @@ def display_temp_zonal(db1,db2):
     df_temp = db1[db1["unit"] == '°C']
     df_ocup = db2[(db2["ds"] == db2["ds"].max()) & (db2["unique_id"] != 'ocupacion_flotante')]
     zonas = [f"T{i}" for i in range(1, 11)]
-    espacios = np.array([30, 26, 15, 21, 6])
+    espacios = np.array([6, 21, 26, 30, 15])
     Z = [df_temp[df_temp["unique_id"].isin(zonas[i:i+2])][['value']].mean().iloc[-1] for i in range(0, 10, 2)]
     with st.container(border=False, key="temp-zon"):
         st.markdown("#### 📍Zonas Monitoreadas")
-        zonas = ['Sala de Juntas <br>Cubículos <br>(P2)',' Gerencia <br> Area TI <br> (P2)',
+        zonas = ['Sala de Juntas <br>Cubículos <br>(P2)',' Gerencia General <br> TI <br> (P2)',
                  'Gestión Humana <br> Eficiencia Preventa <br>(P1)','Contabilidad <br> Sala de Juntas <br> (P1)','Gestión Humana <br> Depto. Jurídico <br> (P1)']
         cols = st.columns(5, vertical_alignment='bottom')
         for i, col in enumerate(cols):
-            col.markdown(f"""<div class="custom-metric">{zonas[i]}<br><br><div class="value-mon">🌡️ {Z[i]:.1f} °C <br>👥 {df_ocup.value.iloc[i]:.0f} ({df_ocup.value.iloc[i]/espacios[i]:.1f}%) </div></div>""", unsafe_allow_html=True)
+            col.markdown(f"""<div class="custom-metric">{zonas[i]}<br><br><div class="value-mon">🌡️ {Z[i]:.1f} °C <br>👥 {df_ocup.value.iloc[i]:.0f}/{espacios[i]:.0f} </div></div>""", unsafe_allow_html=True)
 
 
 def display_smart_control_gen(db1, db2, t_int, db_AA=None):
