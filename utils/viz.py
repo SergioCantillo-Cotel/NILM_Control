@@ -154,7 +154,7 @@ def render_custom_metric(col, label, value, delta=None,color='#6c757d',sym=""):
 
 def display_comparativa(db_AA,db_pers,t_ext=None,t_int=None):
     fig = go.Figure()
-    now = pd.Timestamp.now().floor('15min')
+    now = (pd.Timestamp.now()-pd.Timedelta(hours=5)).floor('15min')
     inicio = now - timedelta(weeks=1)
     
     sch_BMS = (pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
