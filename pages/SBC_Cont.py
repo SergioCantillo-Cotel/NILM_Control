@@ -1,10 +1,11 @@
 import streamlit as st
 from utils import tools, viz
 
+tools.quarter_autorefresh()
 credentials = tools.bigquery_auth()
 db_pow, db_temp, db_occup = tools.read_bq_db(credentials)
 lat, lon = 3.4793949016367822, -76.52284557701176
-datos = tools.get_climate_data_1m(lat, lon)
+datos = tools.get_climate_data(lat, lon)
 t_prom = tools.get_temp_prom(db_temp)
 #opcion = st.sidebar.selectbox("Seleccione la zona:",["General", "(P2) Sala de Juntas - Cubículos","(P2) TI - Gerencia General","(P1) Gestión H. - Eficiencia E. - Preventa",
 #                                            "(P1) Contabilidad - Recepción","(P1) Gestión H. - Depto Juridico"])
