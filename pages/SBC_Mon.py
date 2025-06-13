@@ -1,10 +1,11 @@
 import streamlit as st
 from utils import tools, viz
 
+tools.quarter_autorefresh()
 credentials = tools.bigquery_auth()
 db_pow, db_oth, db_occup = tools.read_bq_db(credentials)
 lat, lon = 3.4793949016367822, -76.52284557701176
-datos = tools.get_climate_data_1m(lat, lon)
+datos = tools.get_climate_data(lat, lon)
 P1LA = st.sidebar.page_link("http://192.168.5.200:3000/", label="Piso 1 - Lado A", icon="📍")
 P1LB = st.sidebar.page_link("http://192.168.5.200:3000/Piso_1_Lado_B", label="Piso 1 - Lado B", icon="📍")
 P2 = st.sidebar.page_link("http://192.168.5.200:3000/Piso_2", label="Piso 2", icon="📍")
