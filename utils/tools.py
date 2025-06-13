@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-from datetime import datetime, timedelta
-import requests_cache, holidays, openmeteo_requests
+from datetime import datetime
+import requests_cache, holidays, openmeteo_requests, math
 from retry_requests import retry
 from google.oauth2 import service_account
 from pandas_gbq import read_gbq
@@ -63,7 +63,7 @@ def gen_others_load(df):
     result = (pivot.melt(id_vars=['ds', 'unit', 'company', 'headquarters'],value_vars=['General', 'Aires Acondicionados', 'SSFV', 'Otros'],var_name='unique_id',value_name='value').sort_values(['ds', 'unique_id']).reset_index(drop=True))
     return result
 
-def get_climate_data_1m(lat, lon):
+def get_climate_data(lat, lon):
     session = retry(requests_cache.CachedSession('.cache', expire_after=3600), retries=5, backoff_factor=0.2)
     r = openmeteo_requests.Client(session=session).weather_api("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon, "models": "gfs_seamless",
@@ -74,7 +74,7 @@ def get_climate_data_1m(lat, lon):
     df = pd.DataFrame({"ds": idx, "T2M": r.Variables(0).ValuesAsNumpy(), "RH2M": r.Variables(1).ValuesAsNumpy(),
                        "PRECTOTCORR": r.Variables(2).ValuesAsNumpy()}).set_index("ds")
     df.index -= pd.Timedelta(hours=5)
-    return df.loc["2025-05-15 16:15:00":datetime.now() - timedelta(hours=5)].reset_index()
+    return df.loc["2025-05-15 16:15:00":datetime.now()].reset_index()
 
 # Función para obtener las métricas
 def get_metrics(general, ac, ssfv, otros):
@@ -120,33 +120,31 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
                        0 if num_personas < 40 else
                        25 if num_personas < 50 else 50)
 
-    p = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
-    delta = p - b
-
-    categoria = (1 if delta < -10 else
-                 2 if delta < -5 else
-                 4 if delta <= 5 else
-                 6 if delta <= 10 else 7)
-
-    return dia_S, p
+    pron = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
+    return dia_S, pron
 
 
 def seleccionar_unidades(pred,personas,fecha,dia):
     zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
-    aires = round(pred / 20,0)
-    base = np.array([0, 20, 40, 60, 80, 100])
-    zonas['proporcion_ocup'] = zonas['value']/zonas['value'].sum()
-    zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
+    if zonas['value'].sum() != 0:
+        aires = math.ceil(pred / 20)
+        zonas['proporcion_ocup'] = zonas['value']/zonas['value'].sum()
+        zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
+    else:
+        aires = 0
+        zonas['proporcion_ocup'] = 0
+    
+    base = np.array([20, 40, 60, 80, 100])
     zonas['encendido'] = 0
     zonas.loc[zonas.head(int(aires)).index, 'encendido'] = 1
-    zonas = zonas.sort_values(by='unique_id', ascending=True)
-    diferencia = pred - base[base < pred]
-    mas = diferencia[-1] if len(diferencia) > 0 else 0
-    velocidad_valor = round(mas / 20 * 7)
+    diferencia = pred - base
+    velocidad_valor = np.clip(np.where(diferencia >= 0, 7, np.ceil(((diferencia + 20) / 20) * 7)),0,7)
     zonas['velocidad_ventilador'] = zonas['encendido'] * velocidad_valor
+    zonas = zonas.sort_values(by='unique_id', ascending=True)
+    
     if zonas['encendido'].sum()==0:
         mensaje = (f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}," 
-        " que los aires acondiconados en las distintas zonas estén apagados de acuerdo con las condiciones de control.")
+        " que los aires acondicionados en las distintas zonas estén apagados de acuerdo con las condiciones de control.")
         encendidas = [0,0,0,0,0]
     else:
         encendidas = zonas['encendido'].values.tolist()
