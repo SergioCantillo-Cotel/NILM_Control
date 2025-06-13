@@ -14,25 +14,18 @@ def toggle_visibility(key):
 
 def graficar_consumo(df,pron,sub):
     fig = go.Figure()
-
     if not sub:
         fig.add_trace(go.Bar(x=df["ds"], y = np.where(df['value'] > 0, np.where(pron['SSFV'].values < df['value'].values, pron["SSFV"], df['value']), - pron["SSFV"] + pron['Otros'] + pron["Aires Acondicionados"]),name="Solar",marker_color="orange"))
         fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] > 0, pron['Otros'], 0), name="Otros",marker_color="gray"))
         fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] > 0, - pron['SSFV'] + pron['Aires Acondicionados'], 0),name="Aires Acondicionados",marker_color="lightblue"))
-        #fig.add_trace(go.Bar(x=df["ds"], y = np.where(df['value'] > 0, pron['Otros'] - pron['SSFV'], np.where((pron['Otros'] - pron['SSFV'])>=0, pron['Otros'],0)),name="Otros",marker_color="gray"))
-        #fig.add_trace(go.Bar(x=df["ds"], y = pron['Aires Acondicionados'] - pron['SSFV'],name="AA",marker_color="lightblue"))
-
-        #fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] >= 0, pron['SSFV'], - pron["SSFV"] + pron['Otros'] + pron["Aires Acondicionados"]),name="Solar",marker_color="orange"))
-        #fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] >= 0, pron['Otros'] - pron['SSFV'], 0), name="Otros",marker_color="gray"))
-        #fig.add_trace(go.Bar(x=df["ds"],y=np.where(df['value'] >= 0, np.maximum(0,pron['Aires Acondicionados'] - pron['Otros'] + pron["SSFV"]), 0),name="Aires Acondicionados",marker_color="lightblue"))
         fig.add_trace(go.Scatter(x=df["ds"], y=round(df["value"],1), mode="lines",name='General',line=dict(color='black')))
-
     else:
         fig.add_trace(go.Scatter(x=df["ds"], y=df["value"], mode="lines",name='Real'))
         fig.add_trace(go.Scatter(x=df["ds"], y=pron, mode="lines",name='Pronosticado'))
-    fig.update_layout(title="", margin=dict(t=30, b=0), barmode="relative",
-                      xaxis=dict(domain=[0.1, 0.99],title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False),
-                      yaxis_title="Consumo (kWh)",legend=dict(orientation="h", x=0.5, xanchor="center", y=1.4, yanchor="top"), height=210)
+    fig.update_layout(title="", margin=dict(t=30, b=0), barmode="relative",font=dict(family="Poppins", color="black"),
+                      xaxis=dict(domain=[0.05, 0.95], title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False, title_font=dict(color='black'),tickfont=dict(color='black')),
+                      yaxis=dict(title="Consumo (kWh)", title_font=dict(color='black'), tickfont=dict(color='black')),
+                      legend=dict(orientation="h", x=0.5, xanchor="center", y=1.4, yanchor="top", font=dict(color="black")), height=210)
     st.plotly_chart(fig, use_container_width=True)
 
 def display_submedidores(submedidores, nombres_submedidores, icons, metrics, db, pron):
@@ -125,7 +118,7 @@ def get_icons():
         "Otros": "images/MedidorOtros.png"
     }
 
-def graficar_intensidad_heatmap(ruta_excel):
+def display_BMS_schedule(ruta_excel):
     df = pd.read_excel(ruta_excel)
     df["dia_semana"] = df["dia_semana"].map({
         "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
@@ -137,19 +130,19 @@ def graficar_intensidad_heatmap(ruta_excel):
     custom_text = [[f"Día: {dia}<br>Hora: {hora}:00<br>Intensidad: {tabla.loc[dia, hora]:.1f}%"
                     for hora in tabla.columns] for dia in tabla.index]
 
-    fig = go.Figure(go.Heatmap(z=tabla.values,x=tabla.columns,y=tabla.index,colorscale='ice',
+    fig = go.Figure(go.Heatmap(z=tabla.values,x=tabla.columns,y=tabla.index,colorscale='rdbu',
                                colorbar=dict(title='Intensidad',title_font=dict(family='Poppins', color='black'),
                                              tickfont=dict(family='Poppins', color='black')),
                                              text=custom_text,hoverinfo='text',xgap=1,ygap=1))
 
     fig.update_layout(
-        margin=dict(t=10, b=0, l=0, r=0), template='simple_white', height=200, font=dict(family='Poppins', color='black'), 
+        margin=dict(t=10, b=0, l=0, r=0), template='simple_white', height=450, font=dict(family='Poppins', color='black'), 
         xaxis=dict(title='Hora', showgrid=True, tickfont=dict(family='Poppins', color='black')),
         yaxis=dict(title='Día', showgrid=True, tickfont=dict(family='Poppins', color='black'))
     )
 
-    st.plotly_chart(fig, use_container_width=True)
-
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    return tabla
 
 def render_custom_metric(col, label, value, delta=None,color='#6c757d',sym=""):
     html = f"""<div class="custom-metric"><div class="label">{label}</div><div class="value">{value}</div>"""
@@ -158,6 +151,31 @@ def render_custom_metric(col, label, value, delta=None,color='#6c757d',sym=""):
         html += f"""<div class="delta" style="color:{color};">{delta}</div>"""
     html += "</div>"
     col.markdown(html, unsafe_allow_html=True)
+
+def display_comparativa(db_AA,db_pers,t_ext=None,t_int=None):
+    fig = go.Figure()
+    now = pd.Timestamp.now().floor('15min')
+    inicio = now - timedelta(weeks=1)
+    
+    sch_BMS = (pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
+               .assign(dia_semana=lambda x: x.ds.dt.day_name(),hora=lambda x: x.ds.dt.hour)
+               .merge(pd.read_excel('BMS/programacion_bms.xlsx').drop('promedio', axis=1),
+                      on=['dia_semana', 'hora'],how='left'))
+    
+    db_AA['ds'] = db_AA['ds'].dt.floor('15min')[(db_AA['ds'] >= inicio) & (db_AA['ds'] <= now)]
+    sch_RT = db_AA.groupby('ds')['value'].agg(lambda x: x.sum() * 100 / x.count()).reset_index()
+    
+    db_pers['ds'] = db_pers['ds'].dt.floor('15min')[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
+    db_pers = db_pers.groupby('ds')['value'].sum().reset_index()
+    
+    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y = sch_BMS["intensidad"], mode="lines",name='Prog. BMS'))        
+    fig.add_trace(go.Scatter(x=sch_RT["ds"], y = sch_RT["value"], mode="lines",name='Comportamiento Real'))        
+    fig.update_layout(title="", margin=dict(t=30, b=0, l=20, r=20), font=dict(family="Poppins", color="black"),
+                      xaxis=dict(domain=[0.05, 0.95], title="Fecha", showline=True, linecolor='black', showgrid=False, 
+                                 zeroline=False, tickfont=dict(color='black'), title_font=dict(color='black')),
+                      yaxis=dict(title="Capacidad de Refrigeración (%)", title_font=dict(color='black'), tickfont=dict(color='black')),
+                      legend=dict(orientation="h", x=0.5, xanchor="center", y=1.1, yanchor="top"), height=510)
+    st.plotly_chart(fig, use_container_width=True)
 
 def display_temp_zonal(db1,db2):
     df_temp = db1[db1["unit"] == '°C']
@@ -191,7 +209,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
         with tab1.container(key='cont-BMS'):
             with st.container(key='SBC-BMS'):
                 st.markdown("##### ❄️ Programación de Carga de refrigeración (BMS)")
-                graficar_intensidad_heatmap(ruta)
+                display_BMS_schedule(ruta)
 
         with tab2.container(key='cont-estAA'):
             estados_AA = db_AA[(db_AA['ds'] == db_AA['ds'].max()) &(db_AA['unique_id'].str.contains(r'Valvula_[13579]$', na=False))].sort_values(by='unique_id').copy()
@@ -205,8 +223,8 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                     estilo(estado)
                 
         with tab3.container(key='cont-BMS-IA'):
-            dia, pronostico = tools.agenda_bms(ruta, datetime.now() - timedelta(hours=5), personas, t_ext, t_int)
-            unidades, vel, resultado = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now() - timedelta(hours=5),dia)
+            dia, pronostico = tools.agenda_bms(ruta, datetime.now(), personas, t_ext, t_int)
+            unidades, vel, resultado = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now(),dia)
             st.info(resultado)
             with st.container(key='SBC-IA'):
                 cols = st.columns(5)
@@ -221,9 +239,12 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                         mode="gauge+number",
                         value=(vel[i] / 7) * 100 if unidades[i] == 1 else 0,
                         number={'suffix': "%"}, domain={'x': [0, 1], 'y': [0, 1]},
-                        gauge={'axis': {'range': [0, 100]},
-                            'bar': {'color': 'green', 'thickness': 1},
-                            }))
-                    fig1.update_layout(margin=dict(t=0, b=0, l=20, r=30), height=120,  
-                                    font=dict(family="Poppins",color="black"))
+                        gauge={'axis': {'range': [0, 100]},'bar': {'color': 'green', 'thickness': 1},}
+                    ))
+                    fig1.update_layout(margin=dict(t=0, b=0, l=20, r=30), height=120, font=dict(family="Poppins",color="black"))
                     cont_zonas.plotly_chart(fig1, use_container_width=True, key=f'vel{i}',config={'displayModeBar': False})
+        
+        with tab4.container(key='cont-comparativa'):
+            estados_AA = db_AA[(db_AA['unique_id'].str.contains(r'Valvula_[13579]$', na=False))].sort_values(by='unique_id').copy()
+            with st.container(key='SBC-graph-com'):
+                display_comparativa(estados_AA,db1)
