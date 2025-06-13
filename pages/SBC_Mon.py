@@ -1,7 +1,7 @@
 import streamlit as st
 from utils import tools, viz
 
-tools.quarter_autorefresh()
+tools.quarter_autorefresh(key='mon')
 credentials = tools.bigquery_auth()
 db_pow, db_oth, db_occup = tools.read_bq_db(credentials)
 lat, lon = 3.4793949016367822, -76.52284557701176
