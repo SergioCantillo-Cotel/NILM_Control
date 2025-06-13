@@ -3,7 +3,7 @@ from utils import tools, viz, ia_model
 import pandas as pd
 from datetime import datetime
 
-tools.quarter_autorefresh()
+tools.quarter_autorefresh(key='q-nilm')
 credentials = tools.bigquery_auth()
 db_pow, db_oth, _ = tools.read_bq_db(credentials)
 lat, lon = 3.4793949016367822, -76.52284557701176
