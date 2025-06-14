@@ -152,11 +152,11 @@ def render_custom_metric(col, label, value, delta=None,color='#6c757d',sym=""):
     html += "</div>"
     col.markdown(html, unsafe_allow_html=True)
 
-def display_comparativa(db_AA,db_pers,t_ext=None,t_int=None):
+def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
+    ruta = 'BMS/programacion_bms.xlsx'
     fig = go.Figure()
-    now = (pd.Timestamp.now()-pd.Timedelta(hours=5)).floor('15min')
-    inicio = now - timedelta(weeks=1)
-    
+    now = pd.Timestamp.now().floor('15min')
+    inicio = now - pd.Timedelta(weeks=1)
     sch_BMS = (pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
                .assign(dia_semana=lambda x: x.ds.dt.day_name(),hora=lambda x: x.ds.dt.hour)
                .merge(pd.read_excel('BMS/programacion_bms.xlsx').drop('promedio', axis=1),
@@ -167,15 +167,29 @@ def display_comparativa(db_AA,db_pers,t_ext=None,t_int=None):
     
     db_pers['ds'] = db_pers['ds'].dt.floor('15min')[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
     db_pers = db_pers.groupby('ds')['value'].sum().reset_index()
-    
+    db_t_ext['ds'] = db_t_ext['ds'].dt.floor('15min')[(db_t_ext['ds'] >= inicio) & (db_t_ext['ds'] <= now)]
+    db_t_ext = db_t_ext.groupby('ds')['T2M'].sum().reset_index() 
+    db_t_int = db_t_int[(db_t_int['ds'] >= inicio) &(db_t_int['ds'] <= now) &(db_t_int['unique_id'].str.match(r'^T(10|[1-9])$'))].copy()
+    db_t_int['ds'] = db_t_int['ds'].dt.floor('15min')
+    db_t_int = db_t_int.pivot_table(index='ds', columns='unique_id', values='value', aggfunc='mean').mean(axis=1).reset_index(name='promedio_T')
+    sch_IA = []
+    #st.write(db_pers)
+    for i in range(len(db_pers)):
+        _, pronostico = tools.agenda_bms(ruta,db_pers['ds'].iloc[i],db_pers['value'].values[i],db_t_ext['T2M'].values[i],db_t_int['promedio_T'].values[i])
+        sch_IA.append({'ds': db_pers['ds'].iloc[i], 'intensidad_IA': pronostico})
+    sch_IA = pd.DataFrame(sch_IA)
     fig.add_trace(go.Scatter(x=sch_BMS["ds"], y = sch_BMS["intensidad"], mode="lines",name='Prog. BMS'))        
     fig.add_trace(go.Scatter(x=sch_RT["ds"], y = sch_RT["value"], mode="lines",name='Comportamiento Real'))        
+    fig.add_trace(go.Scatter(x=sch_IA["ds"], y = sch_IA["intensidad_IA"], mode="lines",name='IA'))        
     fig.update_layout(title="", margin=dict(t=30, b=0, l=20, r=20), font=dict(family="Poppins", color="black"),
-                      xaxis=dict(domain=[0.05, 0.95], title="Fecha", showline=True, linecolor='black', showgrid=False, 
+                      xaxis=dict(domain=[0.05, 0.99], title="Fecha", showline=True, linecolor='black', showgrid=False, 
                                  zeroline=False, tickfont=dict(color='black'), title_font=dict(color='black')),
                       yaxis=dict(title="Capacidad de Refrigeración (%)", title_font=dict(color='black'), tickfont=dict(color='black')),
                       legend=dict(orientation="h", x=0.5, xanchor="center", y=1.1, yanchor="top"), height=510)
     st.plotly_chart(fig, use_container_width=True)
+    dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
+    dif_BMS_IA = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_IA['intensidad_IA']) / sch_BMS['intensidad'], np.nan)).fillna(0)
+    return dif_BMS_RT.mean(), dif_BMS_IA.mean()
 
 def display_temp_zonal(db1,db2):
     df_temp = db1[db1["unit"] == '°C']
