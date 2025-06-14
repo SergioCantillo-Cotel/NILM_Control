@@ -123,11 +123,11 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     pron = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
     return dia_S, pron
 
-
 def seleccionar_unidades(pred,personas,fecha,dia):
     zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
     if zonas['value'].sum() != 0:
         aires = math.ceil(pred / 20)
+        zonas['capacidad'] = np.array([6, 21, 26, 30, 15])
         zonas['proporcion_ocup'] = zonas['value']/zonas['value'].sum()
         zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
     else:
@@ -142,16 +142,29 @@ def seleccionar_unidades(pred,personas,fecha,dia):
     zonas['velocidad_ventilador'] = zonas['encendido'] * velocidad_valor
     zonas = zonas.sort_values(by='unique_id', ascending=True)
     
-    if zonas['encendido'].sum()==0:
-        mensaje = (f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}," 
-        " que los aires acondicionados en las distintas zonas estén apagados de acuerdo con las condiciones de control.")
-        encendidas = [0,0,0,0,0]
-    else:
-        encendidas = zonas['encendido'].values.tolist()
+    if zonas['encendido'].sum() == 0:
         mensaje = (
             f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
-            "que sean encendidos los aires en las siguientes zonas de acuerdo con las condiciones de control: "
-            f"{', '.join(zonas[zonas['encendido'] == 1]['unique_id'].to_list())}.\n\n"
+            "que los aires acondicionados en las distintas zonas estén apagados de acuerdo con las condiciones de control."
+        )
+        encendidas = [0, 0, 0, 0, 0]
+    else:
+        encendidas = zonas['encendido'].values.tolist()
+        zonas_encendidas = zonas[zonas['encendido'] == 1][['unique_id', 'capacidad', 'value']]
+        capacidad_encendidas = zonas_encendidas['capacidad'].values.tolist()
+        if not zonas_encendidas.empty:
+            zonas_lista = '\n' + '\n'.join(
+            [
+                f"<span style='font-family:Poppins;'>- {uid}: {100 * (cap - ocup) / cap:.2f}% de capacidad disponible</span>"
+                for uid, ocup, cap in zip(zonas_encendidas['unique_id'], zonas_encendidas['value'], capacidad_encendidas)
+            ]
+        )
+        else:
+            zonas_lista = '\n(No hay zonas encendidas)'
+        mensaje = (
+            f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
+            "que sean encendidos los aires en las siguientes zonas de acuerdo con las condiciones de control:"
+            f"{zonas_lista}\n\n"
             "Invitamos a las personas que se encuentren en otros espacios y quieran disfrutar de un mayor confort "
             "a ubicarse en estos lugares y disfruten de la compañía de la familia Cotel."
         )
