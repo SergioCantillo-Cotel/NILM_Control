@@ -68,13 +68,13 @@ def get_climate_data(lat, lon):
     r = openmeteo_requests.Client(session=session).weather_api("https://api.open-meteo.com/v1/forecast", params={
         "latitude": lat, "longitude": lon, "models": "gfs_seamless",
         "minutely_15": ["temperature_2m", "relative_humidity_2m", "precipitation"],
-        "start_date": "2025-05-15", "end_date": (datetime.now() - pd.Timedelta(hours=5)).strftime("%Y-%m-%d")})[0].Minutely15()
+        "start_date": "2025-05-15", "end_date": datetime.now().strftime("%Y-%m-%d")})[0].Minutely15()
     idx = pd.date_range(start=pd.to_datetime(r.Time(), unit="s"), end=pd.to_datetime(r.TimeEnd(), unit="s"),
                         freq=pd.Timedelta(seconds=r.Interval()), inclusive="left")
     df = pd.DataFrame({"ds": idx, "T2M": r.Variables(0).ValuesAsNumpy(), "RH2M": r.Variables(1).ValuesAsNumpy(),
                        "PRECTOTCORR": r.Variables(2).ValuesAsNumpy()}).set_index("ds")
     df.index -= pd.Timedelta(hours=5)
-    return df.loc["2025-05-15 16:15:00":datetime.now()].reset_index()
+    return df.loc["2025-05-15 16:15:00":datetime.now() - pd.Timedelta(hours=5)].reset_index()
 
 # Función para obtener las métricas
 def get_metrics(general, ac, ssfv, otros):
