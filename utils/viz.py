@@ -269,12 +269,12 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                                                         number={'suffix': "%"}, domain={'x': [0, 1], 'y': [0, 1]},
                                                         gauge={'axis': {'range': [0, 100]},'bar': {'color': 'green', 'thickness': 1},},
                                                         title={'text': "Ahorro IA vs<br>Programación BMS", 'font': {'size': 12}}))
-                    fig_BMS_IA.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=180, font=dict(family="Poppins",color="black"))
+                    fig_BMS_IA.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=160, font=dict(family="Poppins",color="black"))
                     col_B.plotly_chart(fig_BMS_IA, use_container_width=True, key='dif_BMS_IA',config={'displayModeBar': False})
 
                     fig_BMS_RT = go.Figure(go.Indicator(mode="gauge+number",value=dif_BMS_RT,
                                                         number={'suffix': "%"}, domain={'x': [0, 1], 'y': [0, 1]},
                                                         gauge={'axis': {'range': [0, 100]},'bar': {'color': 'green', 'thickness': 1},},
                                                         title={'text': "Ahorro Operacion RT vs<br>Programación BMS", 'font': {'size': 12}}))
-                    fig_BMS_RT.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=180, font=dict(family="Poppins",color="black"))
+                    fig_BMS_RT.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=160, font=dict(family="Poppins",color="black"))
                     col_B.plotly_chart(fig_BMS_RT, use_container_width=True, key='dif_BMS_RT',config={'displayModeBar': False})
