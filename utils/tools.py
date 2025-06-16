@@ -140,8 +140,7 @@ def seleccionar_unidades(pred,personas,fecha,dia):
     diferencia = pred - base
     velocidad_valor = np.clip(np.where(diferencia >= 0, 7, np.ceil(((diferencia + 20) / 20) * 7)),0,7)
     zonas['velocidad_ventilador'] = zonas['encendido'] * velocidad_valor
-    zonas = zonas.sort_values(by='unique_id', ascending=True)
-    
+    zonas = zonas.sort_values(by='unique_id', ascending=True)    
     if zonas['encendido'].sum() == 0:
         mensaje = (
             f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
@@ -151,16 +150,18 @@ def seleccionar_unidades(pred,personas,fecha,dia):
     else:
         encendidas = zonas['encendido'].values.tolist()
         zonas_encendidas = zonas[zonas['encendido'] == 1][['unique_id', 'capacidad', 'value']]
-        capacidad_encendidas = zonas_encendidas['capacidad'].values.tolist()
         if not zonas_encendidas.empty:
-            zonas_lista = '\n' + '\n'.join(
-            [
-                f"<span style='font-family:Poppins;'>- {uid}: {100 * (cap - ocup) / cap:.2f}% de capacidad disponible</span>"
-                for uid, ocup, cap in zip(zonas_encendidas['unique_id'], zonas_encendidas['value'], capacidad_encendidas)
-            ]
-        )
+            zonas_lista = (
+                "\n" +
+                '\n'.join(
+                    [
+                        f"- {uid}: {100 * (cap - ocup) / cap:.2f}% de capacidad disponible"
+                        for uid, ocup, cap in zip(zonas_encendidas['unique_id'], zonas_encendidas['value'], zonas_encendidas['capacidad'])
+                    ]
+                )
+            )
         else:
-            zonas_lista = '\n(No hay zonas encendidas)'
+            zonas_lista = "(No hay zonas encendidas)"
         mensaje = (
             f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
             "que sean encendidos los aires en las siguientes zonas de acuerdo con las condiciones de control:"
