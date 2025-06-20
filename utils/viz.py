@@ -239,7 +239,7 @@ def display_mgen(db,rango_ev,fecha_int,t_ext,ocup,intensidad,solar,t_int):
                       legend=dict(orientation="h", x=0.5, xanchor="center", y=1.4, yanchor="top", font=dict(color="black")), height=450)
     st.plotly_chart(fig, use_container_width=True)
     
-def display_smart_control_gen(db1, db2, t_int, db_AA=None):
+def display_smart_control_gen(db1, db2, t_int, db_AA=None,  db_Pow=None):
     personas = db1[(db1["ds"] == db1["ds"].max())]['value'].sum()
     personas_zona = db1[(db1["ds"] == db1["ds"].max()) & (db1["unique_id"] != 'ocupacion_flotante')]
     t_ext = db2['T2M'].iloc[-1]
