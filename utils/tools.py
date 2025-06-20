@@ -210,4 +210,4 @@ def seleccionar_unidades(pred,personas,fecha,dia):
             "Invitamos a las personas que se encuentren en otros espacios y quieran disfrutar de un mayor confort "
             "a ubicarse en estos lugares y disfruten de la compañía de la familia Cotel."
         )
-    return encendidas, zonas['velocidad_ventilador'].values.tolist(), mensaje
+    return encendidas, zonas['velocidad_ventilador'].values.tolist(), mensaje, carga
