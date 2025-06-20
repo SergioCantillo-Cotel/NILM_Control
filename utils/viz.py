@@ -270,7 +270,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None,  db_Pow=None):
                     estilo(estado)
                 
         with tab3.container(key='cont-BMS-IA'):
-            dia, pronostico = tools.agenda_bms(ruta, datetime.now()-pd.Timedelta(hours=5), personas, t_ext, t_int)
+            dia, pronostico = tools.agenda_bms(ruta, datetime.now()-pd.Timedelta(hours=5), personas, t_ext, t_int.iloc[-1])
             unidades, vel, resultado, _ = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now()-pd.Timedelta(hours=5),dia)
             st.info(resultado)
             with st.container(key='SBC-IA'):
