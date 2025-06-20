@@ -93,11 +93,18 @@ button[data-baseweb="tab"] p{
 
 .st-key-ext-cond, .st-key-int-cond, .st-key-temp-zon, .st-key-nilm-gen,
 .st-key-nilm-subm-0, .st-key-nilm-subm-1, .st-key-nilm-subm-2, 
-.st-key-SBC-RT, .st-key-SBC-BMS, .st-key-SBC-IA, .st-key-SBC-graph-com{
+.st-key-SBC-RT, .st-key-SBC-BMS, .st-key-SBC-IA, .st-key-SBC-graph-com, .st-key-SBC-impacto{
     padding: 0.7rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     border-radius: 1rem;
     margin-bottom: 0rem;
+}
+
+.zonas-lista {
+    font-family: 'Poppins';
+    font-size: 16px;
+    color: #222;
+    line-height: 1.5;
 }
 
 .custom-metric {
