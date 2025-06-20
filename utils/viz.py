@@ -155,7 +155,7 @@ def render_custom_metric(col, label, value, delta=None,color='#6c757d',sym=""):
 def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
     ruta = 'BMS/programacion_bms.xlsx'
     fig = go.Figure()
-    now = pd.Timestamp.now().floor('15min')
+    now = pd.Timestamp.now().floor('15min') - pd.Timedelta(hours=5)
     inicio = now - pd.Timedelta(weeks=1)
     sch_BMS = (pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
                .assign(dia_semana=lambda x: x.ds.dt.day_name(),hora=lambda x: x.ds.dt.hour)
@@ -166,21 +166,24 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
     sch_RT = db_AA.groupby('ds')['value'].agg(lambda x: x.sum() * 100 / x.count()).reset_index()
     
     db_pers['ds'] = db_pers['ds'].dt.floor('15min')[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
+    pz = db_pers.copy()
     db_pers = db_pers.groupby('ds')['value'].sum().reset_index()
+    
     db_t_ext['ds'] = db_t_ext['ds'].dt.floor('15min')[(db_t_ext['ds'] >= inicio) & (db_t_ext['ds'] <= now)]
     db_t_ext = db_t_ext.groupby('ds')['T2M'].sum().reset_index() 
     db_t_int = db_t_int[(db_t_int['ds'] >= inicio) &(db_t_int['ds'] <= now) &(db_t_int['unique_id'].str.match(r'^T(10|[1-9])$'))].copy()
     db_t_int['ds'] = db_t_int['ds'].dt.floor('15min')
     db_t_int = db_t_int.pivot_table(index='ds', columns='unique_id', values='value', aggfunc='mean').mean(axis=1).reset_index(name='promedio_T')
     sch_IA = []
-    #st.write(db_pers)
+    fechas_unicas = sorted(db_pers['ds'].drop_duplicates())
     for i in range(len(db_pers)):
         _, pronostico = tools.agenda_bms(ruta,db_pers['ds'].iloc[i],db_pers['value'].values[i],db_t_ext['T2M'].values[i],db_t_int['promedio_T'].values[i])
-        sch_IA.append({'ds': db_pers['ds'].iloc[i], 'intensidad_IA': pronostico})
+        carga = tools.nueva_carga(pronostico, pz[(pz['ds'] == fechas_unicas[i]) & (pz['unique_id'] != 'Flotantes')])
+        sch_IA.append({'ds': db_pers['ds'].iloc[i], 'intensidad_IA': carga})
     sch_IA = pd.DataFrame(sch_IA)
-    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y = sch_BMS["intensidad"], mode="lines",name='Prog. BMS'))        
-    fig.add_trace(go.Scatter(x=sch_RT["ds"], y = sch_RT["value"], mode="lines",name='Comportamiento Real'))        
-    fig.add_trace(go.Scatter(x=sch_IA["ds"], y = sch_IA["intensidad_IA"], mode="lines",name='IA'))        
+    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y=sch_BMS["intensidad"], mode="lines", name='Prog. BMS', line=dict(color='red')))
+    fig.add_trace(go.Scatter(x=sch_RT["ds"], y=sch_RT["value"], mode="lines", name='Comportamiento Real', line=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=sch_IA["ds"], y=sch_IA["intensidad_IA"], mode="lines", name='IA', line=dict(color='green')))    
     fig.update_layout(title="", margin=dict(t=30, b=0, l=20, r=20), font=dict(family="Poppins", color="black"),
                       xaxis=dict(domain=[0.05, 0.99], title="Fecha", showline=True, linecolor='black', showgrid=False, 
                                  zeroline=False, tickfont=dict(color='black'), title_font=dict(color='black')),
@@ -189,7 +192,7 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
     st.plotly_chart(fig, use_container_width=True)
     dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
     dif_BMS_IA = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_IA['intensidad_IA']) / sch_BMS['intensidad'], np.nan)).fillna(0)
-    return dif_BMS_RT.mean(), dif_BMS_IA.mean()
+    return dif_BMS_RT.mean(), dif_BMS_IA.mean(), sch_IA
 
 def display_temp_zonal(db1,db2):
     df_temp = db1[db1["unit"] == '°C']
@@ -205,7 +208,37 @@ def display_temp_zonal(db1,db2):
         for i, col in enumerate(cols):
             col.markdown(f"""<div class="custom-metric">{zonas[i]}<br><br><div class="value-mon">🌡️ {Z[i]:.1f} °C <br>👥 {df_ocup.value.iloc[i]:.0f}/{espacios[i]:.0f} </div></div>""", unsafe_allow_html=True)
 
+def display_mgen(db,rango_ev,fecha_int,t_ext,ocup,intensidad,solar,t_int):
+    med_Gen = db.loc[(db["unique_id"] == 'General') & 
+                     (db["ds"] >= pd.Timestamp(rango_ev[0])) &
+                     (db["ds"] <= pd.Timestamp(rango_ev[1])), ['ds', 'value']]
+    
+    t_ext = t_ext.loc[(t_ext['ds'] >= pd.Timestamp(fecha_int)) & (t_ext['ds'] <= pd.Timestamp(rango_ev[1]))].copy()
+    
+    ocup = ocup.groupby('ds')['value'].sum().reset_index().rename(columns={'value': 'Ocupacion'})
+    ocup = ocup.loc[(ocup['ds'] >= pd.Timestamp(fecha_int)) & (ocup['ds'] <= pd.Timestamp(rango_ev[1]))].copy()
+    
+    intensidad = intensidad.loc[(intensidad['ds'] >= pd.Timestamp(fecha_int)) & (intensidad['ds'] <= pd.Timestamp(rango_ev[1]))].copy()
+    
+    solar = solar.loc[(solar['ds'] >= pd.Timestamp(fecha_int))&(solar['ds'] <= pd.Timestamp(rango_ev[1]))&(solar['unique_id'] == 'SSFV'),['ds', 'value']].copy()
+    
+    t_int = t_int.reset_index().assign(ds=lambda df: pd.to_datetime(df['ds']).dt.floor('15min'))  # Convierte 'ds' en columna
+    t_int = t_int.loc[(t_int['ds'] >= pd.Timestamp(fecha_int)) & (t_int['ds'] <= pd.Timestamp(rango_ev[1]))].copy()
+    
+    entradas_DT = solar.merge(ocup, on='ds').merge(t_ext, on='ds').merge(t_int, on='ds').merge(intensidad, on='ds')
 
+    DT = tools.digital_twin(entradas_DT)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=med_Gen["ds"], y=round(med_Gen["value"],1), mode="lines",name='General',line=dict(color='black')))
+    fig.add_trace(go.Scatter(x=DT["ds"], y=round(DT["Dig_Twin"],1), mode="lines",name='Digital Twin',line=dict(color='red')))
+    fig.add_vline(x=fecha_int, line_width=2, line_dash="dash", line_color="red")
+    fig.update_layout(title="", margin=dict(t=30, b=0),font=dict(family="Poppins", color="black"),
+                      xaxis=dict(domain=[0.05, 0.95], title="Fecha", showline=True, linecolor='black', showgrid=False, zeroline=False, title_font=dict(color='black'),tickfont=dict(color='black')),
+                      yaxis=dict(title="Consumo (kWh)", title_font=dict(color='black'), tickfont=dict(color='black')),
+                      legend=dict(orientation="h", x=0.5, xanchor="center", y=1.4, yanchor="top", font=dict(color="black")), height=450)
+    st.plotly_chart(fig, use_container_width=True)
+    
 def display_smart_control_gen(db1, db2, t_int, db_AA=None):
     personas = db1[(db1["ds"] == db1["ds"].max())]['value'].sum()
     personas_zona = db1[(db1["ds"] == db1["ds"].max()) & (db1["unique_id"] != 'ocupacion_flotante')]
@@ -218,7 +251,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
              'G. Humana <br> Depto. Jurídico <br> (P1)']
     
     with st.container(key="styled_tabs_2"):
-        tab1, tab2, tab3, tab4 = st.tabs(["Programación Estándar", "Estado Tiempo Real", "Programación IA", "Comparativa"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Programación Estándar", "Estado Tiempo Real", "Programación IA", "Comparativa","Evaluación de Impacto"])
 
         with tab1.container(key='cont-BMS'):
             with st.container(key='SBC-BMS'):
@@ -226,7 +259,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                 display_BMS_schedule(ruta)
 
         with tab2.container(key='cont-estAA'):
-            estados_AA = db_AA[(db_AA['ds'] == db_AA['ds'].max()) &(db_AA['unique_id'].str.contains(r'Valvula_[13579]$', na=False))].sort_values(by='unique_id').copy()
+            estados_AA = db_AA[(db_AA['ds'] == db_AA['ds'].max()) & (db_AA['unique_id'].str.contains(r'Valvula_[13579]$', na=False))].sort_values(by='unique_id').copy()
             with st.container(key='SBC-RT'):
                 cols_estAA = st.columns(5)
                 for i, col in enumerate(cols_estAA):
@@ -238,7 +271,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
                 
         with tab3.container(key='cont-BMS-IA'):
             dia, pronostico = tools.agenda_bms(ruta, datetime.now()-pd.Timedelta(hours=5), personas, t_ext, t_int)
-            unidades, vel, resultado = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now()-pd.Timedelta(hours=5),dia)
+            unidades, vel, resultado, _ = tools.seleccionar_unidades(pronostico,personas_zona,datetime.now()-pd.Timedelta(hours=5),dia)
             st.info(resultado)
             with st.container(key='SBC-IA'):
                 cols = st.columns(5)
@@ -263,18 +296,25 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None):
             with st.container(key='SBC-graph-com'):
                 col_A,col_B = st.columns([7, 3],vertical_alignment='center')
                 with col_A:
-                    dif_BMS_RT, dif_BMS_IA = display_comparativa(estados_AA,db1,db2,db_AA)
+                    dif_BMS_RT, dif_BMS_IA, int_IA = display_comparativa(estados_AA,db1,db2,db_AA)
                 with col_B:
-                    fig_BMS_IA = go.Figure(go.Indicator(mode="gauge+number",value=dif_BMS_IA, align = 'center',
+                    fig_BMS_IA = go.Figure(go.Indicator(mode="number",value=dif_BMS_IA, align = 'center',
                                                         number={'suffix': "%"}, domain={'x': [0, 1], 'y': [0, 1]},
-                                                        gauge={'axis': {'range': [0, 100]},'bar': {'color': 'green', 'thickness': 1},},
                                                         title={'text': "Ahorro IA vs<br>Programación BMS", 'font': {'size': 14}}))
-                    fig_BMS_IA.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=200, font=dict(family="Poppins",color="black"))
+                    fig_BMS_IA.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=190, font=dict(family="Poppins",color="black"))
                     col_B.plotly_chart(fig_BMS_IA, use_container_width=True, key='dif_BMS_IA',config={'displayModeBar': False})
 
-                    fig_BMS_RT = go.Figure(go.Indicator(mode="gauge+number",value=dif_BMS_RT, align = 'center',
+                    fig_BMS_RT = go.Figure(go.Indicator(mode="number",value=dif_BMS_RT, align = 'center',
                                                         number={'suffix': "%"}, domain={'x': [0, 1], 'y': [0, 1]},
-                                                        gauge={'axis': {'range': [0, 100]},'bar': {'color': 'green', 'thickness': 1},},
                                                         title={'text': "Ahorro Operacion RT vs<br>Programación BMS", 'font': {'size': 14}}))
-                    fig_BMS_RT.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=200, font=dict(family="Poppins",color="black"))
+                    fig_BMS_RT.update_layout(margin=dict(t=80, b=20, l=20, r=20), height=190, font=dict(family="Poppins",color="black"))
                     col_B.plotly_chart(fig_BMS_RT, use_container_width=True, key='dif_BMS_RT',config={'displayModeBar': False})
+
+        with tab5.container(key='cont-impacto'):
+            with st.container(key='SBC-impacto'):
+                col_a, col_b = st.columns([1,1], vertical_alignment='center')
+                with col_a:
+                    rango_est = col_a.date_input("Periodo de evaluación", (pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(days=7), pd.Timestamp.now() - pd.Timedelta(hours=5)), min_value='2025-06-11' ,key='periodo_estudio')
+                with col_b:       
+                    fecha_int = col_b.date_input("Fecha de Intervención", pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(days=2), min_value=rango_est[0], max_value=rango_est[1] ,key='fecha_intervencion')
+                display_mgen(db_Pow,rango_est,pd.Timestamp(fecha_int),db2[['ds','T2M']],db1[['ds','value']],int_IA,db_Pow,t_int)
