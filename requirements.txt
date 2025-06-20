@@ -13,3 +13,4 @@ pandas-gbq
 tensorflow
 holidays
 openpyxl
+xgboost
