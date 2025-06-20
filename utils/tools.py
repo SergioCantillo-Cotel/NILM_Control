@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 from pandas_gbq import read_gbq
 import pandas as pd
 import numpy as np
+import xgboost as xgb
 
 credenciales_json = st.secrets["gcp_service_account"]
 BIGQUERY_PROJECT_ID = st.secrets["bigquery"]["project_id"]
@@ -94,7 +95,17 @@ def load_custom_css(file_path: str = "styles/style.css"):
 def get_temp_prom(db1):
     df_temp = db1.loc[db1["unit"] == '°C']
     promedios = (df_temp.groupby(df_temp['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean())
-    return promedios.iloc[-1]
+    return promedios
+
+def digital_twin(entradas_DT):
+    entradas_DT_d = entradas_DT.drop(columns='ds')
+    booster = xgb.Booster()
+    booster.load_model("IA\modelo_xgb.model")
+    dtest = xgb.DMatrix(entradas_DT_d)
+    DT = booster.predict(dtest)
+    fechas = entradas_DT['ds'].values    
+    DT = pd.DataFrame({'ds': fechas,'Dig_Twin': DT})
+    return DT
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
@@ -123,24 +134,54 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     pron = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
     return dia_S, pron
 
-def seleccionar_unidades(pred,personas,fecha,dia):
+def nueva_carga(pred, personas):
     zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
+    zonas = zonas.drop_duplicates(subset=['ds', 'unique_id'], keep='first')
     if zonas['value'].sum() != 0:
         aires = math.ceil(pred / 20)
         zonas['capacidad'] = np.array([6, 21, 26, 30, 15])
-        zonas['proporcion_ocup'] = zonas['value']/zonas['value'].sum()
+        zonas['proporcion_ocup'] = zonas['value'] / zonas['value'].sum()
+        zonas['disponibilidad'] = round(100 - (zonas['value'] / zonas['capacidad'] * 100), 2)
         zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
     else:
         aires = 0
         zonas['proporcion_ocup'] = 0
-    
+        zonas['disponibilidad'] = 100
+
     base = np.array([20, 40, 60, 80, 100])
     zonas['encendido'] = 0
-    zonas.loc[zonas.head(int(aires)).index, 'encendido'] = 1
-    diferencia = pred - base
-    velocidad_valor = np.clip(np.where(diferencia >= 0, 7, np.ceil(((diferencia + 20) / 20) * 7)),0,7)
+    zonas.loc[zonas.head(int(aires)).index.intersection(zonas[zonas['disponibilidad'] < 100].index), 'encendido'] = 1
+    no_encendidos = (zonas['encendido'] != 1).sum()
+    carga = max(0, pred - (20 * no_encendidos))  
+    return carga
+
+def seleccionar_unidades(pred,personas,fecha,dia):
+    zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
+    if zonas['value'].sum() != 0:
+        # Primer cálculo provisional (no se usa para encendido)
+        zonas['capacidad'] = np.array([6, 21, 26, 30, 15])
+        zonas['proporcion_ocup'] = zonas['value'] / zonas['value'].sum()
+        zonas['disponibilidad'] = round(100 - (zonas['value'] / zonas['capacidad'] * 100), 2)
+        zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
+    else:
+        zonas['proporcion_ocup'] = 0
+        zonas['disponibilidad'] = 100
+    
+    base = np.array([20, 40, 60, 80, 100])
+    # Ajuste de carga real
+    no_encendidos = (zonas['disponibilidad'] == 100).sum()
+    carga = max(0, pred - (20 * no_encendidos))
+    aires = math.ceil(carga / 20) if carga > 0 else 0
+
+    zonas['encendido'] = 0
+    if aires > 0:
+        zonas.loc[zonas.head(int(aires)).index.intersection(zonas[zonas['disponibilidad'] < 100].index), 'encendido'] = 1
+
+    diferencia = carga - base
+    velocidad_valor = np.clip(np.where(diferencia >= 0, 7, np.ceil(((diferencia + 20) / 20) * 7)), 0, 7)
     zonas['velocidad_ventilador'] = zonas['encendido'] * velocidad_valor
-    zonas = zonas.sort_values(by='unique_id', ascending=True)    
+    zonas = zonas.sort_values(by='unique_id', ascending=True)   
+    
     if zonas['encendido'].sum() == 0:
         mensaje = (
             f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
