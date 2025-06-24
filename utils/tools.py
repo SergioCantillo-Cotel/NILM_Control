@@ -118,11 +118,11 @@ def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     festivos = holidays.CountryHoliday('CO', years=fecha.year)
 
     if fecha.date() in festivos:
-        return f"Hoy es {dia_str} y la hora actual es {h}, la programación Estándar del BMS es: Intensidad de Aires 0 %"
+        return dia_S, 0  # <-- Retorna dos valores
 
     base = df.query("dia == @dia_str and hora == @h")['intensidad']
     if base.empty:
-        return f"No hay programación registrada para {dia_str} a las {h}:00 horas."
+        return dia_S, 0  # <-- Retorna dos valores
 
     b = base.iat[0]
     ajuste_personas = (-100 if num_personas < 5 else
