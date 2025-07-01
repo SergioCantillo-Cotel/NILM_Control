@@ -207,8 +207,8 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
                       yaxis=dict(title="Capacidad de Refrigeración (%)", title_font=dict(color='black'), tickfont=dict(color='black')),
                       legend=dict(orientation="h", x=0.5, xanchor="center", y=1.1, yanchor="top"), height=510)
     st.plotly_chart(fig, use_container_width=True)
-    dif_BMS_RT = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_RT['value']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
-    dif_BMS_IA = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_IA['intensidad_IA']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
+    dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS[intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
+    dif_BMS_IA = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_IA['intensidad_IA']) / sch_BMS['intensidad'], np.nan)).fillna(0)
     return dif_BMS_RT.mean(), dif_BMS_IA.mean(), sch_IA
 
 def display_temp_zonal(db1,db2):
