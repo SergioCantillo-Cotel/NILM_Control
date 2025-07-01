@@ -107,6 +107,39 @@ def digital_twin(entradas_DT):
     DT = pd.DataFrame({'ds': fechas,'Dig_Twin': DT})
     return DT
 
+def get_prog_bms(inicio, now):
+    ruta = 'BMS/Prog_BMS.xlsx'
+    festivos = holidays.CountryHoliday('CO', years=range(inicio.year, now.year + 1))
+    # Leer el archivo y asegurar que los nombres de columnas sean consistentes
+    df_prog = pd.read_excel(ruta, sheet_name='Raw')
+    # Si hay columna 'promedio', eliminarla
+    if 'promedio' in df_prog.columns:
+        df_prog = df_prog.drop('promedio', axis=1)
+    # Si hay columna de minutos, crear columna hora:minuto
+    if 'MIN' in df_prog.columns:
+        df_prog["hora_min"] = df_prog["HORA"].astype(str).str.zfill(2) + ":" + df_prog["MIN"].astype(str).str.zfill(2)
+    else:
+        df_prog["hora_min"] = df_prog["HORA"].astype(str).str.zfill(2) + ":00"
+    # Generar rango de fechas cada 15 minutos
+    sch_BMS = (
+        pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
+        .assign(
+            DIA_SEMANA=lambda x: x.ds.dt.day_name(),
+            hora=lambda x: x.ds.dt.hour,
+            minuto=lambda x: x.ds.dt.minute,
+            fecha=lambda x: x.ds.dt.date,
+            hora_min=lambda x: x.ds.dt.strftime('%H:%M')
+        )
+        .merge(df_prog, left_on=['DIA_SEMANA', 'hora_min'], right_on=['DIA_SEMANA', 'hora_min'], how='left')
+    )
+    # Poner intensidad en 0 si es festivo
+    sch_BMS['INTENSIDAD'] = sch_BMS.apply(
+        lambda row: 0 if row['fecha'] in festivos else row['INTENSIDAD'],
+        axis=1
+    )
+    sch_BMS = sch_BMS.drop(columns=['fecha'])
+    return sch_BMS
+
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
     df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
     dia_str = fecha.strftime('%A')
