@@ -161,27 +161,44 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
                .assign(dia_semana=lambda x: x.ds.dt.day_name(),hora=lambda x: x.ds.dt.hour)
                .merge(pd.read_excel('BMS/programacion_bms.xlsx').drop('promedio', axis=1),
                       on=['dia_semana', 'hora'],how='left'))
+
+    fechas_base = sch_BMS['ds']
     
-    db_AA['ds'] = db_AA['ds'].dt.floor('15min')[(db_AA['ds'] >= inicio) & (db_AA['ds'] <= now)]
+    # Procesar db_AA
+    db_AA['ds'] = db_AA['ds'].dt.floor('15min')
+    db_AA = db_AA[(db_AA['ds'] >= inicio) & (db_AA['ds'] <= now)]
     sch_RT = db_AA.groupby('ds')['value'].agg(lambda x: x.sum() * 100 / x.count()).reset_index()
+    sch_RT = fechas_base.to_frame().merge(sch_RT, on='ds', how='left')
     
-    db_pers['ds'] = db_pers['ds'].dt.floor('15min')[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
-    pz = db_pers.copy()
+    # Procesar db_pers
+    db_pers['ds'] = db_pers['ds'].dt.floor('15min')
+    db_pers = db_pers[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
+    pz = db_pers[db_pers["ds"].notna()].copy()
     db_pers = db_pers.groupby('ds')['value'].sum().reset_index()
+    db_pers = fechas_base.to_frame().merge(db_pers, on='ds', how='left')
     
-    db_t_ext['ds'] = db_t_ext['ds'].dt.floor('15min')[(db_t_ext['ds'] >= inicio) & (db_t_ext['ds'] <= now)]
-    db_t_ext = db_t_ext.groupby('ds')['T2M'].sum().reset_index() 
-    db_t_int = db_t_int[(db_t_int['ds'] >= inicio) &(db_t_int['ds'] <= now) &(db_t_int['unique_id'].str.match(r'^T(10|[1-9])$'))].copy()
+    # Procesar db_t_ext
+    db_t_ext['ds'] = db_t_ext['ds'].dt.floor('15min')
+    db_t_ext = db_t_ext[(db_t_ext['ds'] >= inicio) & (db_t_ext['ds'] <= now)]
+    db_t_ext = db_t_ext.groupby('ds')['T2M'].sum().reset_index()
+    db_t_ext = fechas_base.to_frame().merge(db_t_ext, on='ds', how='left')
+
+    # Procesar db_t_int
+    db_t_int = db_t_int[(db_t_int['ds'] >= inicio) & (db_t_int['ds'] <= now) & (db_t_int['unique_id'].str.match(r'^T(10|[1-9])$'))].copy()
     db_t_int['ds'] = db_t_int['ds'].dt.floor('15min')
     db_t_int = db_t_int.pivot_table(index='ds', columns='unique_id', values='value', aggfunc='mean').mean(axis=1).reset_index(name='promedio_T')
+    db_t_int = fechas_base.to_frame().merge(db_t_int, on='ds', how='left')
+    
     sch_IA = []
     fechas_unicas = sorted(db_pers['ds'].drop_duplicates())
+    
     for i in range(len(db_pers)):
-        _, pronostico = tools.agenda_bms(ruta,db_pers['ds'].iloc[i],db_pers['value'].values[i],db_t_ext['T2M'].values[i],db_t_int['promedio_T'].values[i])
+        _, pronostico = tools.agenda_bms(ruta, db_pers['ds'].iloc[i], db_pers['value'].values[i], db_t_ext['T2M'].values[i], db_t_int['promedio_T'].values[i])
         carga = tools.nueva_carga(pronostico, pz[(pz['ds'] == fechas_unicas[i]) & (pz['unique_id'] != 'Flotantes')])
         sch_IA.append({'ds': db_pers['ds'].iloc[i], 'intensidad_IA': carga})
+    
     sch_IA = pd.DataFrame(sch_IA)
-    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y=sch_BMS["intensidad"], mode="lines", name='Prog. BMS', line=dict(color='red')))
+    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y=sch_BMS["INTENSIDAD"], mode="lines", name='Prog. BMS', line=dict(color='red')))
     fig.add_trace(go.Scatter(x=sch_RT["ds"], y=sch_RT["value"], mode="lines", name='Comportamiento Real', line=dict(color='blue')))
     fig.add_trace(go.Scatter(x=sch_IA["ds"], y=sch_IA["intensidad_IA"], mode="lines", name='IA', line=dict(color='green')))    
     fig.update_layout(title="", margin=dict(t=30, b=0, l=20, r=20), font=dict(family="Poppins", color="black"),
@@ -190,8 +207,8 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
                       yaxis=dict(title="Capacidad de Refrigeración (%)", title_font=dict(color='black'), tickfont=dict(color='black')),
                       legend=dict(orientation="h", x=0.5, xanchor="center", y=1.1, yanchor="top"), height=510)
     st.plotly_chart(fig, use_container_width=True)
-    dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
-    dif_BMS_IA = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_IA['intensidad_IA']) / sch_BMS['intensidad'], np.nan)).fillna(0)
+    dif_BMS_RT = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_RT['value']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
+    dif_BMS_IA = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_IA['intensidad_IA']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
     return dif_BMS_RT.mean(), dif_BMS_IA.mean(), sch_IA
 
 def display_temp_zonal(db1,db2):
