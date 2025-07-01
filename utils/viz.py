@@ -198,7 +198,7 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
         sch_IA.append({'ds': db_pers['ds'].iloc[i], 'intensidad_IA': carga})
     
     sch_IA = pd.DataFrame(sch_IA)
-    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y=sch_BMS["intensidad"], mode="lines", name='Prog. BMS', line=dict(color='red')))
+    fig.add_trace(go.Scatter(x=sch_BMS["ds"], y=sch_BMS['intensidad'], mode="lines", name='Prog. BMS', line=dict(color='red')))
     fig.add_trace(go.Scatter(x=sch_RT["ds"], y=sch_RT["value"], mode="lines", name='Comportamiento Real', line=dict(color='blue')))
     fig.add_trace(go.Scatter(x=sch_IA["ds"], y=sch_IA["intensidad_IA"], mode="lines", name='IA', line=dict(color='green')))    
     fig.update_layout(title="", margin=dict(t=30, b=0, l=20, r=20), font=dict(family="Poppins", color="black"),
@@ -207,7 +207,7 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
                       yaxis=dict(title="Capacidad de Refrigeración (%)", title_font=dict(color='black'), tickfont=dict(color='black')),
                       legend=dict(orientation="h", x=0.5, xanchor="center", y=1.1, yanchor="top"), height=510)
     st.plotly_chart(fig, use_container_width=True)
-    dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS[intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
+    dif_BMS_RT = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_RT['value']) / sch_BMS['intensidad'], np.nan)).fillna(0)
     dif_BMS_IA = pd.Series(np.where(sch_BMS['intensidad'] != 0, 100 * (sch_BMS['intensidad'] - sch_IA['intensidad_IA']) / sch_BMS['intensidad'], np.nan)).fillna(0)
     return dif_BMS_RT.mean(), dif_BMS_IA.mean(), sch_IA
 
