@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 from utils import tools
+import holidays
 
 def toggle_visibility(key):
     if key not in st.session_state:
@@ -157,10 +158,18 @@ def display_comparativa(db_AA,db_pers,db_t_ext=None,db_t_int=None):
     fig = go.Figure()
     now = pd.Timestamp.now().floor('15min') - pd.Timedelta(hours=5)
     inicio = now - pd.Timedelta(weeks=1)
+    # Festivos de Colombia para el rango actual
+    años = list(set([inicio.year, now.year]))
+    festivos_col = holidays.CountryHoliday('CO', years=años)
+
+    # Generar agenda con festivos considerados como 'Sunday'
     sch_BMS = (pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
-               .assign(dia_semana=lambda x: x.ds.dt.day_name(),hora=lambda x: x.ds.dt.hour)
-               .merge(pd.read_excel('BMS/programacion_bms.xlsx').drop('promedio', axis=1),
-                      on=['dia_semana', 'hora'],how='left'))
+               .assign(
+                   dia_semana=lambda x: x['ds'].apply(lambda d: 'Sunday' if d.date() in festivos_col else d.day_name()),
+                   hora=lambda x: x['ds'].dt.hour
+               )
+               .merge(pd.read_excel(ruta).drop('promedio', axis=1),
+                      on=['dia_semana', 'hora'], how='left'))
 
     fechas_base = sch_BMS['ds']
     
