@@ -140,17 +140,19 @@ def digital_twin(entradas_DT):
 def get_prog_bms(inicio, now):
     ruta = 'BMS/Prog_BMS.xlsx'
     festivos = holidays.CountryHoliday('CO', years=range(inicio.year, now.year + 1))
-    # Leer el archivo y asegurar que los nombres de columnas sean consistentes
     df_prog = pd.read_excel(ruta, sheet_name='Raw')
-    # Si hay columna 'promedio', eliminarla
     if 'promedio' in df_prog.columns:
         df_prog = df_prog.drop('promedio', axis=1)
-    # Si hay columna de minutos, crear columna hora:minuto
     if 'MIN' in df_prog.columns:
         df_prog["hora_min"] = df_prog["HORA"].astype(str).str.zfill(2) + ":" + df_prog["MIN"].astype(str).str.zfill(2)
     else:
         df_prog["hora_min"] = df_prog["HORA"].astype(str).str.zfill(2) + ":00"
-    # Generar rango de fechas cada 15 minutos
+    # Optimiza tipos
+    for col in ['DIA_SEMANA']:
+        if col in df_prog.columns:
+            df_prog[col] = df_prog[col].astype('string[pyarrow]')
+    if 'hora_min' in df_prog.columns:
+        df_prog['hora_min'] = df_prog['hora_min'].astype('string[pyarrow]')
     sch_BMS = (
         pd.DataFrame({'ds': pd.date_range(inicio, now, freq='15min')})
         .assign(
@@ -160,91 +162,121 @@ def get_prog_bms(inicio, now):
             fecha=lambda x: x.ds.dt.date,
             hora_min=lambda x: x.ds.dt.strftime('%H:%M')
         )
-        .merge(df_prog, left_on=['DIA_SEMANA', 'hora_min'], right_on=['DIA_SEMANA', 'hora_min'], how='left')
+        .merge(df_prog, on=['DIA_SEMANA', 'hora_min'], how='left')
     )
-    # Poner intensidad en 0 si es festivo
-    sch_BMS['INTENSIDAD'] = sch_BMS.apply(
-        lambda row: 0 if row['fecha'] in festivos else row['INTENSIDAD'],
-        axis=1
+    sch_BMS['INTENSIDAD'] = np.where(
+        sch_BMS['fecha'].isin(festivos), 0, sch_BMS['INTENSIDAD']
     )
     sch_BMS = sch_BMS.drop(columns=['fecha'])
+    del df_prog
+    gc.collect()
     return sch_BMS
 
 def agenda_bms(ruta, fecha, num_personas, temp_ext, temp_int):
-    df = pd.read_excel(ruta, usecols=[0, 1, 2, 3], names=['dia', 'hora', '_', 'intensidad'])
-    dia_str = fecha.strftime('%A')
-    dias_es = {'Monday': 'Lunes','Tuesday': 'Martes','Wednesday': 'Miércoles',
-               'Thursday': 'Jueves','Friday': 'Viernes','Saturday': 'Sábado',
-               'Sunday': 'Domingo'}
-    dia_S = dias_es[dia_str]
-    h = fecha.hour
+    df = pd.read_excel(ruta, sheet_name='Raw')
+    if 'MIN' in df.columns:
+        df["hora_min"] = df["HORA"].astype(str).str.zfill(2) + ":" + df["MIN"].astype(str).str.zfill(2)
+    else:
+        df["hora_min"] = df["HORA"].astype(str).str.zfill(2) + ":00"
+    # Optimiza tipos
+    if 'DIA_SEMANA' in df.columns:
+        df['DIA_SEMANA'] = df['DIA_SEMANA'].astype('string[pyarrow]')
+    if 'hora_min' in df.columns:
+        df['hora_min'] = df['hora_min'].astype('string[pyarrow]')
+    dias_es = {
+        "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+        "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo"
+    }
+    if df["DIA_SEMANA"].iloc[0] in dias_es:
+        df["DIA_SEMANA"] = df["DIA_SEMANA"].map(dias_es)
+    dia_S = dias_es[fecha.strftime('%A')]
+    h, m = fecha.hour, fecha.minute
+
     festivos = holidays.CountryHoliday('CO', years=fecha.year)
-
     if fecha.date() in festivos:
-        return dia_S, 0  # <-- Retorna dos valores
+        del df
+        gc.collect()
+        return dia_S, 0
 
-    base = df.query("dia == @dia_str and hora == @h")['intensidad']
+    hora_min_actual = f"{str(h).zfill(2)}:{str(m).zfill(2)}"
+    base = df.query("DIA_SEMANA == @dia_S and hora_min == @hora_min_actual")['INTENSIDAD']
     if base.empty:
-        return dia_S, 0  # <-- Retorna dos valores
+        base = df.query("DIA_SEMANA == @dia_S and HORA == @h")['INTENSIDAD']
+        if base.empty:
+            del df
+            gc.collect()
+            return dia_S, 0
 
     b = base.iat[0]
-    ajuste_personas = (-100 if num_personas < 5 else
-                       -50 if num_personas < 10 else
-                       -25 if num_personas < 20 else
-                       0 if num_personas < 40 else
-                       25 if num_personas < 50 else 50)
-
-    pron = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
+    if any(pd.isna(x) or x is None for x in [num_personas, temp_int]):
+        pron = b
+    else:
+        ajuste_personas = (
+            -100 if num_personas < 5 else
+            -50 if num_personas < 10 else
+            -25 if num_personas < 20 else
+            0 if num_personas < 40 else
+            25 if num_personas < 50 else 50
+        )
+        pron = max(0, min(100, b - (25 - temp_ext) + 1.5 * (temp_int - 25) + ajuste_personas))
+    del df
+    gc.collect()
     return dia_S, pron
 
 def nueva_carga(pred, personas):
-    zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
-    zonas = zonas.drop_duplicates(subset=['ds', 'unique_id'], keep='first')
-    if zonas['value'].sum() != 0:
-        aires = math.ceil(pred / 20)
-        zonas['capacidad'] = np.array([6, 21, 26, 30, 15])
-        zonas['proporcion_ocup'] = zonas['value'] / zonas['value'].sum()
-        zonas['disponibilidad'] = round(100 - (zonas['value'] / zonas['capacidad'] * 100), 2)
-        zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
-    else:
-        aires = 0
-        zonas['proporcion_ocup'] = 0
-        zonas['disponibilidad'] = 100
-
-    base = np.array([20, 40, 60, 80, 100])
-    zonas['encendido'] = 0
-    zonas.loc[zonas.head(int(aires)).index.intersection(zonas[zonas['disponibilidad'] < 100].index), 'encendido'] = 1
-    no_encendidos = (zonas['encendido'] != 1).sum()
-    carga = max(0, pred - (20 * no_encendidos))  
-    return carga
-
-def seleccionar_unidades(pred,personas,fecha,dia):
-    zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')]
+    zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')].drop_duplicates(subset=["ds", "unique_id"])
+    if 'unique_id' in zonas.columns:
+        zonas['unique_id'] = zonas['unique_id'].astype('string[pyarrow]')
     if zonas['value'].sum() != 0:
         # Primer cálculo provisional (no se usa para encendido)
-        zonas['capacidad'] = np.array([6, 21, 26, 30, 15])
+        zonas['capacidad'] = np.array([6, 21, 26, 30, 15], dtype='int8')
         zonas['proporcion_ocup'] = zonas['value'] / zonas['value'].sum()
         zonas['disponibilidad'] = round(100 - (zonas['value'] / zonas['capacidad'] * 100), 2)
         zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
     else:
         zonas['proporcion_ocup'] = 0
         zonas['disponibilidad'] = 100
-    
-    base = np.array([20, 40, 60, 80, 100])
-    # Ajuste de carga real
-    no_encendidos = (zonas['disponibilidad'] == 100).sum()
-    carga = max(0, pred - (20 * no_encendidos))
+
+    aires_ini = math.ceil(pred / 20) if pred > 0 else 0
+    zonas_aire = zonas.head(int(aires_ini)).copy()
+    no_encendidos = (zonas_aire['disponibilidad'] == 100).sum()
+    carga_bruta = max(0, pred - (20 * no_encendidos))
+    carga = min(100, int(carga_bruta // 20) * 20)
+    #aires = math.ceil(carga / 20) if carga > 0 else 0    
+    #print("carga:", carga, "aires", aires)
+    del zonas, zonas_aire
+    gc.collect()
+    return carga
+
+def seleccionar_unidades(pred, personas, fecha, dia):
+    zonas = personas[(personas["ds"] == personas["ds"].max()) & (personas["unique_id"] != 'Flotantes')].copy()
+    if 'unique_id' in zonas.columns:
+        zonas['unique_id'] = zonas['unique_id'].astype('string[pyarrow]')
+    if zonas['value'].sum() != 0:
+        zonas['capacidad'] = np.array([6, 21, 26, 30, 15], dtype='int8')
+        zonas['proporcion_ocup'] = zonas['value'] / zonas['value'].sum()
+        zonas['disponibilidad'] = np.round(100 - (zonas['value'] / zonas['capacidad'] * 100), 2)
+        zonas = zonas.sort_values(by='proporcion_ocup', ascending=False)
+    else:
+        zonas['proporcion_ocup'] = 0
+        zonas['disponibilidad'] = 100
+
+    aires_ini = math.ceil(pred / 20) if pred > 0 else 0
+    zonas_aire = zonas.head(int(aires_ini)).copy()
+    no_encendidos = (zonas_aire['disponibilidad'] == 100).sum()
+    carga = round(max(0, pred - (20 * no_encendidos)), 2)
     aires = math.ceil(carga / 20) if carga > 0 else 0
 
     zonas['encendido'] = 0
     if aires > 0:
-        zonas.loc[zonas.head(int(aires)).index.intersection(zonas[zonas['disponibilidad'] < 100].index), 'encendido'] = 1
+        idx = zonas.head(int(aires)).index.intersection(zonas[zonas['disponibilidad'] < 100].index)
+        zonas.loc[idx, 'encendido'] = 1
 
-    diferencia = carga - base
-    velocidad_valor = np.clip(np.where(diferencia >= 0, 7, np.ceil(((diferencia + 20) / 20) * 7)), 0, 7)
-    zonas['velocidad_ventilador'] = zonas['encendido'] * velocidad_valor
-    zonas = zonas.sort_values(by='unique_id', ascending=True)   
-    
+    velocidad_valor = np.ceil(7 * (1 - zonas['disponibilidad'] / 100))
+    velocidad_valor = np.clip(velocidad_valor, 0, 7).astype(int)
+    zonas['velocidad_ventilador'] = (zonas['encendido'] * velocidad_valor).astype(int)
+    zonas = zonas.sort_values(by='unique_id', ascending=True)
+
     if zonas['encendido'].sum() == 0:
         mensaje = (
             f"Cotel IA sugiere en este momento, {dia} a las {fecha.hour}:{fecha.strftime('%M')}, "
@@ -273,4 +305,55 @@ def seleccionar_unidades(pred,personas,fecha,dia):
             "Invitamos a las personas que se encuentren en otros espacios y quieran disfrutar de un mayor confort "
             "a ubicarse en estos lugares y disfruten de la compañía de la familia Cotel."
         )
+    del zonas_aire
+    gc.collect()
     return encendidas, zonas['velocidad_ventilador'].values.tolist(), mensaje, carga
+
+def obtener_ia(row, ruta, pz):
+    _, pron = agenda_bms(ruta, row['ds'], row['value'], row['T2M'], row['promedio_T'])
+    personas_zona = pz[(pz['ds'] == row['ds']) & (pz['unique_id'] != 'Flotantes')]
+    return pd.Series({'intensidad_IA': nueva_carga(pron, personas_zona)}, dtype='float32')
+
+def calcular_comparativa(db_AA, db_pers, db_t_ext, db_t_int):
+    ruta = 'BMS/Prog_BMS.xlsx'
+    now = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor('15min')
+    inicio = now - pd.Timedelta(weeks=1)
+    sch_BMS = get_prog_bms(inicio, now)
+    fechas_base = sch_BMS['ds']
+
+    db_AA = db_AA.copy(); db_AA['ds'] = db_AA['ds'].dt.floor('15min')
+    db_AA = db_AA[(db_AA['ds'] >= inicio) & (db_AA['ds'] <= now)]
+    sch_RT = fechas_base.to_frame().merge(
+        db_AA.groupby('ds')['value'].agg(lambda x: x.sum() * 100 / x.count()).reset_index(), on='ds', how='left'
+    )
+
+    db_pers = db_pers.copy(); db_pers['ds'] = db_pers['ds'].dt.floor('15min')
+    db_pers = db_pers[(db_pers['ds'] >= inicio) & (db_pers['ds'] <= now)]
+    pz = db_pers[db_pers["ds"].notna()].copy()
+    db_pers = fechas_base.to_frame().merge(
+        db_pers.groupby('ds')['value'].sum().reset_index(), on='ds', how='left'
+    )
+
+    db_t_ext = db_t_ext.copy(); db_t_ext['ds'] = db_t_ext['ds'].dt.floor('15min')
+    db_t_ext = db_t_ext[(db_t_ext['ds'] >= inicio) & (db_t_ext['ds'] <= now)]
+    db_t_ext = fechas_base.to_frame().merge(
+        db_t_ext.groupby('ds')['T2M'].sum().reset_index(), on='ds', how='left'
+    )
+
+    db_t_int = db_t_int.copy()
+    db_t_int = db_t_int[(db_t_int['ds'] >= inicio) & (db_t_int['ds'] <= now) & (db_t_int['unique_id'].str.match(r'^T(10|[1-9])$'))]
+    db_t_int['ds'] = db_t_int['ds'].dt.floor('15min')
+    db_t_int = fechas_base.to_frame().merge(
+        db_t_int.pivot_table(index='ds', columns='unique_id', values='value', aggfunc='mean').mean(axis=1).reset_index(name='promedio_T'),
+        on='ds', how='left'
+    )
+
+    df_ia = db_pers[['ds', 'value']].merge(db_t_ext[['ds', 'T2M']], on='ds', how='left').merge(db_t_int[['ds', 'promedio_T']], on='ds', how='left')
+    sch_IA = pd.concat([df_ia[['ds']], df_ia.apply(lambda row: obtener_ia(row, ruta, pz), axis=1)], axis=1)
+
+    dif_BMS_RT = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_RT['value']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
+    dif_BMS_IA = pd.Series(np.where(sch_BMS['INTENSIDAD'] != 0, 100 * (sch_BMS['INTENSIDAD'] - sch_IA['intensidad_IA']) / sch_BMS['INTENSIDAD'], np.nan)).fillna(0)
+
+    del db_AA, db_pers, db_t_ext, db_t_int
+    gc.collect()
+    return sch_BMS, sch_RT, sch_IA, np.nanmean(dif_BMS_RT), np.nanmean(dif_BMS_IA)
