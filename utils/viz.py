@@ -255,8 +255,8 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None, db_Pow=None):
                 display_BMS_adj_sch(ruta_2)
                 
         with tab2.container(key='cont-BMS-IA'):
-            dia, pronostico = tools.agenda_bms(ruta_2, pd.Timestamp.now(), personas, t_ext, t_int.iloc[-1])
-            unidades, vel, resultado, _ = tools.seleccionar_unidades(pronostico,personas_zona,pd.Timestamp.now(),dia)
+            dia, pronostico = tools.agenda_bms(ruta_2, pd.Timestamp.now() - pd.Timedelta(hours=5), personas, t_ext, t_int.iloc[-1])
+            unidades, vel, resultado, _ = tools.seleccionar_unidades(pronostico,personas_zona,pd.Timestamp.now() - pd.Timedelta(hours=5),dia)
             st.info(resultado)
             with st.container(key='SBC-IA'):
                 cols = st.columns(5)
@@ -299,7 +299,7 @@ def display_smart_control_gen(db1, db2, t_int, db_AA=None, db_Pow=None):
             with st.container(key='SBC-impacto'):
                 col_a, col_b = st.columns([1,1], vertical_alignment='center')
                 with col_a:
-                    rango_est = col_a.date_input("Periodo de evaluación", (pd.Timestamp.now() - pd.Timedelta(days=7), pd.Timestamp.now()), min_value='2025-06-11' ,key='periodo_estudio')
+                    rango_est = col_a.date_input("Periodo de evaluación", (pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(days=7), pd.Timestamp.now() - pd.Timedelta(hours=5)), min_value='2025-06-11' ,key='periodo_estudio')
                 with col_b:       
-                    fecha_int = col_b.date_input("Fecha de Intervención", pd.Timestamp.now() - pd.Timedelta(days=2), min_value=rango_est[0], max_value=rango_est[1] ,key='fecha_intervencion')
+                    fecha_int = col_b.date_input("Fecha de Intervención", pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(days=2), min_value=rango_est[0], max_value=rango_est[1] ,key='fecha_intervencion')
                 display_mgen(db_Pow,rango_est,pd.Timestamp(fecha_int),db2[['ds','T2M']],db1[['ds','value']],int_IA,db_Pow,t_int)
