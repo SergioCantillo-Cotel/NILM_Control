@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 from datetime import datetime
-import requests_cache, holidays, openmeteo_requests, math
+import requests_cache, holidays, openmeteo_requests, math, pyarrow, gc
 from retry_requests import retry
 from google.oauth2 import service_account
 from pandas_gbq import read_gbq
@@ -93,18 +93,24 @@ def load_custom_css(file_path: str = "styles/style.css"):
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 def get_temp_prom(db1):
-    df_temp = db1.loc[db1["unit"] == '°C']
-    promedios = (df_temp.groupby(df_temp['ds'].dt.strftime('%Y-%m-%d %H:%M:%S'))['value'].mean())
-    return promedios
+    df_temp = db1.loc[db1["unit"] == '°C', ['ds', 'value']].copy()
+    df_temp['ds'] = pd.to_datetime(df_temp['ds']).dt.floor('15min')
+    df_temp['value'] = df_temp['value'].astype('float32')
+    prom = df_temp.groupby('ds', observed=True)['value'].mean()
+    del df_temp
+    gc.collect()
+    return prom
 
 def digital_twin(entradas_DT):
     entradas_DT_d = entradas_DT.drop(columns='ds')
     booster = xgb.Booster()
-    booster.load_model("./IA/modelo_xgb.model")
+    booster.load_model("IA\modelo_xgb.model")
     dtest = xgb.DMatrix(entradas_DT_d)
     DT = booster.predict(dtest)
-    fechas = entradas_DT['ds'].values    
-    DT = pd.DataFrame({'ds': fechas,'Dig_Twin': DT})
+    fechas = entradas_DT['ds'].values
+    DT = pd.DataFrame({'ds': fechas, 'Dig_Twin': DT})
+    del entradas_DT, dtest, booster
+    gc.collect()
     return DT
 
 def get_prog_bms(inicio, now):
