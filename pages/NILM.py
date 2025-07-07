@@ -8,6 +8,7 @@ credentials = tools.bigquery_auth()
 db_pow, db_oth, _ = tools.read_bq_db(credentials)
 lat, lon = 3.4793949016367822, -76.52284557701176
 datos = tools.get_climate_data(lat, lon)
+fecha_ini = st.sidebar.date_input("Fecha Inicio", pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(weeks=1), min_value=pd.Timestamp.now() - pd.Timedelta(hours=5) - pd.Timedelta(weeks=4), max_value=pd.Timestamp.now() - pd.Timedelta(hours=5) ,key='fecha_NILM')
 
 nombres_submedidores = {"AC": "Aires Acondicionados","SSFV": "SSFV","otros": "Otras Cargas"}
 
