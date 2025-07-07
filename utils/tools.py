@@ -28,6 +28,30 @@ def quarter_autorefresh(key: str = "q", state_key: str = "first") -> None:
 def bigquery_auth():
     return service_account.Credentials.from_service_account_info(credenciales_json)
 
+def _get_mapping():
+    return {
+        'PM_General_Potencia_Activa_Total': 'General',
+        'PM_Aires_Potencia_Activa_Total': 'Aires Acondicionados',
+        'Inversor_Solar_Potencia_Salida': 'SSFV',
+        'ocupacion_sede': 'Ocupacion',
+        'ocupacion_flotante': 'Flotantes',
+        **{f'IDU_0_{i}_Room_Temperature': f'T{i}' for i in range(1, 11)},
+        **{f'IDU_0_{i}_Estado_valvula': f'Valvula_{i}' for i in range(1, 11)},
+        'ocupacion_UMA_1': 'Z1: Sala de Juntas - Cubiculos',
+        'ocupacion_UMA_2': 'Z2: Gerencia - Area TI',
+        'ocupacion_UMA_3': 'Z3: G. Humana - EE - Preventa',
+        'ocupacion_UMA_4': 'Z4: Contabilidad - Sala de Juntas',
+        'ocupacion_UMA_5': 'Z5: G. Humana - Depto. Jurídico'
+    }
+
+def _optimize_types(df):
+    for col in ['unique_id', 'unit', 'company', 'headquarters']:
+        if col in df.columns:
+            df[col] = df[col].astype('string[pyarrow]')
+    if 'value' in df.columns:
+        df['value'] = df['value'].astype('float32')
+    return df
+
 def read_bq_db(credentials):
     _POWER = ['PM_General_Potencia_Activa_Total', 'PM_Aires_Potencia_Activa_Total', 'Inversor_Solar_Potencia_Salida']
     _TEMP = [f'IDU_0_{i}_Room_Temperature' for i in range(1, 11)]+[f'IDU_0_{i}_Estado_valvula' for i in range(1, 11)]+['ocupacion_sede']
