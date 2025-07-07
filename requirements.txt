@@ -14,3 +14,4 @@ tensorflow
 holidays
 openpyxl
 xgboost
+pyarrow
