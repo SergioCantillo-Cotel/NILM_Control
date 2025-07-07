@@ -134,6 +134,10 @@ button[data-baseweb="tab"] p{
     margin-bottom: 0.3rem;
 }
 
+.element-container {
+    margin-bottom: 0.5rem;
+}
+
 .custom-metric .value {
     font-size: 2.1rem;
     font-weight: 400;
@@ -142,8 +146,8 @@ button[data-baseweb="tab"] p{
 }
 
 .custom-metric .value-mon {
-    font-size: 1.9rem;
-    font-weight: 300;
+    font-size: 1.7rem;
+    font-weight: 200;
     text-align: left;
     color: #111;
 }
