@@ -26,5 +26,5 @@ metrics = tools.get_metrics(db_pow.loc[db_pow["unique_id"] == 'General',"value"]
 
 submedidores = tools.get_submedidores(metrics)
 
-viz.display_general(viz.get_icons(), metrics, db_pow, Y_hat_df2)
-viz.display_submedidores(submedidores, nombres_submedidores, viz.get_icons(), metrics, db_pow, Y_hat_df2)
+viz.display_general(viz.get_icons(), metrics, db_pow, Y_hat_df2, fecha_ini)
+viz.display_submedidores(submedidores, nombres_submedidores, viz.get_icons(), metrics, db_pow, Y_hat_df2, fecha_ini)
