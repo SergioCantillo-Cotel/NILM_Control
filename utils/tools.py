@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+from pandas_gbq import read_gbq
 
 credenciales_json = st.secrets["gcp_service_account"]
 BIGQUERY_PROJECT_ID = st.secrets["bigquery"]["project_id"]
