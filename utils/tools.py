@@ -4,7 +4,6 @@ from datetime import datetime
 import requests_cache, holidays, openmeteo_requests, math, pyarrow, gc
 from retry_requests import retry
 from google.oauth2 import service_account
-from pandas_gbq import read_gbq
 import pandas as pd
 import numpy as np
 import xgboost as xgb
